@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: inventario-remisiones
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: inventario-db
+          property: connectionString
+
+databases:
+  - name: inventario-db
+    plan: free
+    databaseName: inventario
+    user: inventario

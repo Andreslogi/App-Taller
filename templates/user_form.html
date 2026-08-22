@@ -1,0 +1,8 @@
+{% extends 'base.html' %}{% block content %}
+<div class="card"><h2>{{ 'Editar usuario' if user else 'Nuevo usuario' }}</h2><form method="post" class="form-grid">
+{% if not user %}<div><label>Usuario</label><input name="username" required placeholder="Ej. vendedor1"></div>{% endif %}
+<div><label>Nombre completo</label><input name="full_name" required value="{{ user.full_name if user else '' }}"></div>
+<div><label>Rol</label><select name="role"><option value="vendedor" {% if user and user.role=='vendedor' %}selected{% endif %}>Vendedor</option><option value="administrador" {% if user and user.role=='administrador' %}selected{% endif %}>Administrador</option></select></div>
+<div><label>{{ 'Nueva contraseña (dejar vacía para conservar)' if user else 'Contraseña' }}</label><input type="password" name="password" {% if not user %}required{% endif %} minlength="8"></div>
+{% if user %}<div><label>Estado</label><select name="active"><option value="1" {% if user.active %}selected{% endif %}>Activo</option><option value="0" {% if not user.active %}selected{% endif %}>Inactivo</option></select></div>{% endif %}
+<div class="form-actions"><button class="btn btn-primary" type="submit">Guardar</button><a class="btn" href="{{ url_for('users') }}">Cancelar</a></div></form></div>{% endblock %}

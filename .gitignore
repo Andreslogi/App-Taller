@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+build/
+dist/
+*.spec
+data/*.db
+invoices/*.pdf
+backups/*
+!backups/.gitkeep

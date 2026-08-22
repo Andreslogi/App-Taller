@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block content %}
+<div class="card"><div class="card-header"><h2>Usuarios</h2><a class="btn btn-primary" href="{{ url_for('user_new') }}">+ Nuevo usuario</a></div>
+<div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>
+{% for user in users %}<tr><td>{{ user.full_name }}</td><td>{{ user.username }}</td><td>{{ user.role|capitalize }}</td><td>{{ 'Activo' if user.active else 'Inactivo' }}</td><td><a class="btn btn-sm" href="{{ url_for('user_edit',user_id=user.id) }}">Editar</a></td></tr>{% endfor %}
+</tbody></table></div></div>{% endblock %}

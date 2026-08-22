@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% set heading='Vendedores' %}{% block content %}
+<div class="card"><div class="card-header"><div><h2>Vendedores del negocio</h2><div class="muted">Estos nombres identifican quién realizó cada venta. Son independientes del usuario que inicia sesión.</div></div>{% if g.user.role == 'administrador' %}<a class="btn btn-primary" href="{{ url_for('salesperson_new') }}">+ Nuevo vendedor</a>{% endif %}</div>
+<div class="table-wrap"><table class="table"><thead><tr><th>Nombre</th><th>Estado</th>{% if g.user.role == 'administrador' %}<th></th>{% endif %}</tr></thead><tbody>
+{% for seller in salespeople %}<tr><td>{{ seller.name }}</td><td>{{ 'Activo' if seller.active else 'Inactivo' }}</td>{% if g.user.role == 'administrador' %}<td><a class="btn btn-sm btn-light" href="{{ url_for('salesperson_edit',salesperson_id=seller.id) }}">Editar</a></td>{% endif %}</tr>{% else %}<tr><td colspan="3">No hay vendedores registrados.</td></tr>{% endfor %}
+</tbody></table></div></div>{% endblock %}
