@@ -1,30 +1,1264 @@
-{% extends 'base.html' %}{% set heading='Nueva remisión' %}{% block content %}
+{% extends 'base.html' %}
+{% set heading = 'Nueva remisión' %}
+
+{% block content %}
+
 <form method="post" id="invoiceForm">
-<div class="card"><h3>Datos del cliente</h3><div class="form-grid"><div class="form-group"><label>Nombre</label><input name="customer_name" value="Consumidor final"></div><div class="form-group"><label>Documento</label><input name="customer_document"></div><div class="form-group"><label>Teléfono</label><input name="customer_phone"></div><div class="form-group"><label>Correo</label><input name="customer_email" type="email"></div><div class="form-group"><label>Dirección</label><input name="customer_address"></div><div class="form-group"><label>Placa del vehículo</label><input name="vehicle_plate" maxlength="10" placeholder="Ej: ABC123" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div><div class="form-group"><label>¿Quién está vendiendo? *</label><select name="salesperson_id" required><option value="">Seleccione vendedor...</option>{% for seller in salespeople %}<option value="{{ seller.id }}">{{ seller.name }}</option>{% endfor %}</select><div class="muted">Identifica al vendedor real aunque se use el usuario genérico "vendedor".</div></div></div></div>
 
-<div class="card"><div class="actions" style="justify-content:space-between"><div><h3 style="margin-bottom:5px">Productos</h3><div class="muted">Los productos vendidos descuentan automáticamente el inventario.</div></div><button class="btn btn-light" type="button" onclick="addProductRow()">+ Agregar producto</button></div><div class="table-wrap"><table class="table invoice-items"><thead><tr><th>Producto</th><th>Disponible</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th><th></th></tr></thead><tbody id="productsBody"></tbody></table></div></div>
+    <!-- =====================================================
+         DATOS DEL CLIENTE
+    ====================================================== -->
 
-<div class="card"><div class="actions" style="justify-content:space-between"><div><h3 style="margin-bottom:5px">Servicios</h3><div class="muted">Cada servicio distribuye automáticamente 70% para el trabajador y 30% para el negocio.</div></div><button class="btn btn-light" type="button" onclick="addServiceRow()">+ Agregar servicio</button></div><div class="table-wrap"><table class="table invoice-items"><thead><tr><th>Servicio</th><th>Trabajador</th><th>Cantidad</th><th>Valor</th><th>Total</th><th>Trabajador 70%</th><th>Negocio 30%</th><th></th></tr></thead><tbody id="servicesBody"></tbody></table></div></div>
+    <div class="card">
 
-<div class="card"><div class="totals"><div class="row"><span>Subtotal</span><strong id="subtotal">$ 0</strong></div><div class="row"><span>Impuesto ({{ settings.tax_rate }}%)</span><strong id="tax">$ 0</strong></div><div class="row grand"><span>Total remisión</span><span id="total">$ 0</span></div></div><hr style="border:0;border-top:1px solid #d8e0ea;margin:18px 0"><div class="grid grid-2"><div><div class="muted">Total servicios para trabajadores</div><div style="font-size:20px;font-weight:700" id="workerTotal">$ 0</div></div><div><div class="muted">Total servicios para el negocio</div><div style="font-size:20px;font-weight:700" id="businessTotal">$ 0</div></div></div></div>
+        <h3>Datos del cliente</h3>
 
-<div class="card"><div class="form-grid"><div class="form-group"><label>Forma de pago</label><select name="payment_method"><option>Efectivo</option><option>Transferencia</option><option>Tarjeta</option><option>Crédito</option></select></div><div class="form-group"><label>Observaciones</label><input name="notes"></div></div><button class="btn btn-success" type="submit">Generar remisión</button></div>
+        <div class="form-grid">
+
+            <div class="form-group">
+                <label>Nombre</label>
+
+                <input
+                    name="customer_name"
+                    value="{{ request.form.get('customer_name', 'Consumidor final') }}"
+                >
+            </div>
+
+
+            <div class="form-group">
+                <label>Documento</label>
+
+                <input
+                    name="customer_document"
+                    value="{{ request.form.get('customer_document', '') }}"
+                >
+            </div>
+
+
+            <div class="form-group">
+                <label>Teléfono</label>
+
+                <input
+                    name="customer_phone"
+                    value="{{ request.form.get('customer_phone', '') }}"
+                >
+            </div>
+
+
+            <div class="form-group">
+                <label>Correo</label>
+
+                <input
+                    name="customer_email"
+                    type="email"
+                    value="{{ request.form.get('customer_email', '') }}"
+                >
+            </div>
+
+
+            <div class="form-group">
+                <label>Dirección</label>
+
+                <input
+                    name="customer_address"
+                    value="{{ request.form.get('customer_address', '') }}"
+                >
+            </div>
+
+
+            <div class="form-group">
+                <label>Placa del vehículo</label>
+
+                <input
+                    name="vehicle_plate"
+                    maxlength="10"
+                    placeholder="Ej: ABC123"
+                    style="text-transform: uppercase;"
+                    value="{{ request.form.get('vehicle_plate', '') }}"
+                    oninput="this.value = this.value.toUpperCase()"
+                >
+            </div>
+
+
+            <div class="form-group">
+
+                <label>¿Quién está vendiendo? *</label>
+
+                <select name="salesperson_id">
+
+                    <option value="">
+                        Seleccione vendedor...
+                    </option>
+
+                    {% for seller in salespeople %}
+
+                        <option
+                            value="{{ seller.id }}"
+                            {% if request.form.get('salesperson_id', '') == seller.id|string %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ seller.name }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <div class="muted">
+                    Identifica al vendedor real aunque se utilice
+                    el usuario genérico "vendedor".
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         PRODUCTOS
+    ====================================================== -->
+
+    <div class="card">
+
+        <div
+            class="actions"
+            style="justify-content: space-between;"
+        >
+
+            <div>
+
+                <h3 style="margin-bottom: 5px;">
+                    Productos
+                </h3>
+
+                <div class="muted">
+                    Los productos vendidos descuentan
+                    automáticamente el inventario.
+                </div>
+
+            </div>
+
+
+            <button
+                class="btn btn-light"
+                type="button"
+                onclick="addProductRow()"
+            >
+                + Agregar producto
+            </button>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="table invoice-items">
+
+                <thead>
+
+                    <tr>
+                        <th>Producto</th>
+                        <th>Disponible</th>
+                        <th>Cantidad</th>
+                        <th>Precio unitario</th>
+                        <th>Total</th>
+                        <th></th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="productsBody"></tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         SERVICIOS
+    ====================================================== -->
+
+    <div class="card">
+
+        <div
+            class="actions"
+            style="justify-content: space-between;"
+        >
+
+            <div>
+
+                <h3 style="margin-bottom: 5px;">
+                    Servicios
+                </h3>
+
+                <div class="muted">
+                    Cada servicio distribuye automáticamente
+                    70% para el trabajador y 30% para el negocio.
+                </div>
+
+            </div>
+
+
+            <button
+                class="btn btn-light"
+                type="button"
+                onclick="addServiceRow()"
+            >
+                + Agregar servicio
+            </button>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="table invoice-items">
+
+                <thead>
+
+                    <tr>
+                        <th>Servicio</th>
+                        <th>Trabajador</th>
+                        <th>Cantidad</th>
+                        <th>Valor</th>
+                        <th>Total</th>
+                        <th>Trabajador 70%</th>
+                        <th>Negocio 30%</th>
+                        <th></th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="servicesBody"></tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         TOTALES
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="totals">
+
+            <div class="row">
+
+                <span>Subtotal</span>
+
+                <strong id="subtotal">
+                    $ 0
+                </strong>
+
+            </div>
+
+
+            <div class="row">
+
+                <span>
+                    Impuesto ({{ settings.tax_rate }}%)
+                </span>
+
+                <strong id="tax">
+                    $ 0
+                </strong>
+
+            </div>
+
+
+            <div class="row grand">
+
+                <span>
+                    Total remisión
+                </span>
+
+                <span id="total">
+                    $ 0
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <hr
+            style="
+                border: 0;
+                border-top: 1px solid #d8e0ea;
+                margin: 18px 0;
+            "
+        >
+
+
+        <div class="grid grid-2">
+
+            <div>
+
+                <div class="muted">
+                    Total servicios para trabajadores
+                </div>
+
+                <div
+                    style="
+                        font-size: 20px;
+                        font-weight: 700;
+                    "
+                    id="workerTotal"
+                >
+                    $ 0
+                </div>
+
+            </div>
+
+
+            <div>
+
+                <div class="muted">
+                    Total servicios para el negocio
+                </div>
+
+                <div
+                    style="
+                        font-size: 20px;
+                        font-weight: 700;
+                    "
+                    id="businessTotal"
+                >
+                    $ 0
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         PAGO / OBSERVACIONES
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>Forma de pago</label>
+
+                {% set payment = request.form.get(
+                    'payment_method',
+                    'Efectivo'
+                ) %}
+
+                <select name="payment_method">
+
+                    <option
+                        value="Efectivo"
+                        {% if payment == 'Efectivo' %}
+                            selected
+                        {% endif %}
+                    >
+                        Efectivo
+                    </option>
+
+
+                    <option
+                        value="Transferencia"
+                        {% if payment == 'Transferencia' %}
+                            selected
+                        {% endif %}
+                    >
+                        Transferencia
+                    </option>
+
+
+                    <option
+                        value="Tarjeta"
+                        {% if payment == 'Tarjeta' %}
+                            selected
+                        {% endif %}
+                    >
+                        Tarjeta
+                    </option>
+
+
+                    <option
+                        value="Crédito"
+                        {% if payment == 'Crédito' %}
+                            selected
+                        {% endif %}
+                    >
+                        Crédito
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>Observaciones</label>
+
+                <input
+                    name="notes"
+                    value="{{ request.form.get('notes', '') }}"
+                >
+
+            </div>
+
+        </div>
+
+
+        <button
+            class="btn btn-success"
+            type="submit"
+        >
+            Generar remisión
+        </button>
+
+    </div>
+
 </form>
 
-<template id="productTemplate"><tr><td><select name="product_id[]" onchange="productChanged(this)"><option value="">Seleccione...</option>{% for p in products %}<option value="{{ p.id }}" data-stock="{{ p.stock }}" data-price="{{ p.sale_price }}">{{ p.code }} - {{ p.description }}</option>{% endfor %}</select></td><td class="stock">-</td><td><input name="quantity[]" type="number" min="0.01" step="0.01" value="1" oninput="calculate()"></td><td><input name="price[]" type="number" min="0" step="0.01" value="0" oninput="calculate()"></td><td class="line-total">$ 0</td><td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove();calculate()">X</button></td></tr></template>
 
-<template id="serviceTemplate"><tr><td><select name="service_id[]" onchange="serviceChanged(this)"><option value="">Seleccione...</option>{% for s in services %}<option value="{{ s.id }}" data-price="{{ s.default_price }}">{{ s.name }}</option>{% endfor %}</select></td><td><input name="service_worker[]" placeholder="Nombre del trabajador"></td><td><input name="service_quantity[]" type="number" min="0.01" step="0.01" value="1" oninput="calculate()"></td><td><input name="service_price[]" type="number" min="0" step="0.01" value="0" oninput="calculate()"></td><td class="service-line-total">$ 0</td><td class="worker-share">$ 0</td><td class="business-share">$ 0</td><td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove();calculate()">X</button></td></tr></template>
+
+<!-- =========================================================
+     DATOS PARA JAVASCRIPT
+     Jinja queda únicamente en HTML.
+========================================================= -->
+
+<div
+    id="invoiceConfiguration"
+    data-tax-rate="{{ settings.tax_rate or 0 }}"
+    style="display: none;"
+></div>
+
+
+<div
+    id="previousProducts"
+    style="display: none;"
+>
+
+    {% for product_id in request.form.getlist('product_id[]') %}
+
+        {% set index = loop.index0 %}
+
+        <div
+            class="previous-product"
+            data-id="{{ product_id }}"
+            data-quantity="{{ request.form.getlist('quantity[]')[index] if index < request.form.getlist('quantity[]')|length else '1' }}"
+            data-price="{{ request.form.getlist('price[]')[index] if index < request.form.getlist('price[]')|length else '0' }}"
+        ></div>
+
+    {% endfor %}
+
+</div>
+
+
+<div
+    id="previousServices"
+    style="display: none;"
+>
+
+    {% for service_id in request.form.getlist('service_id[]') %}
+
+        {% set index = loop.index0 %}
+
+        <div
+            class="previous-service"
+            data-id="{{ service_id }}"
+            data-worker="{{ request.form.getlist('service_worker[]')[index] if index < request.form.getlist('service_worker[]')|length else '' }}"
+            data-quantity="{{ request.form.getlist('service_quantity[]')[index] if index < request.form.getlist('service_quantity[]')|length else '1' }}"
+            data-price="{{ request.form.getlist('service_price[]')[index] if index < request.form.getlist('service_price[]')|length else '0' }}"
+        ></div>
+
+    {% endfor %}
+
+</div>
+
+
+
+<!-- =========================================================
+     TEMPLATE PRODUCTO
+========================================================= -->
+
+<template id="productTemplate">
+
+    <tr>
+
+        <td>
+
+            <select
+                name="product_id[]"
+                onchange="productChanged(this)"
+            >
+
+                <option value="">
+                    Seleccione...
+                </option>
+
+
+                {% for p in products %}
+
+                    <option
+                        value="{{ p.id }}"
+                        data-stock="{{ p.stock }}"
+                        data-price="{{ p.sale_price }}"
+                    >
+                        {{ p.code }} - {{ p.description }}
+                    </option>
+
+                {% endfor %}
+
+            </select>
+
+        </td>
+
+
+        <td class="stock">
+            -
+        </td>
+
+
+        <td>
+
+            <input
+                name="quantity[]"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value="1"
+                oninput="calculate()"
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                name="price[]"
+                type="number"
+                min="0"
+                step="0.01"
+                value="0"
+                oninput="calculate()"
+            >
+
+        </td>
+
+
+        <td class="line-total">
+            $ 0
+        </td>
+
+
+        <td>
+
+            <button
+                type="button"
+                class="btn btn-sm btn-danger"
+                onclick="
+                    this.closest('tr').remove();
+                    calculate();
+                "
+            >
+                X
+            </button>
+
+        </td>
+
+    </tr>
+
+</template>
+
+
+
+<!-- =========================================================
+     TEMPLATE SERVICIO
+========================================================= -->
+
+<template id="serviceTemplate">
+
+    <tr>
+
+        <td>
+
+            <select
+                name="service_id[]"
+                onchange="serviceChanged(this)"
+            >
+
+                <option value="">
+                    Seleccione...
+                </option>
+
+
+                {% for s in services %}
+
+                    <option
+                        value="{{ s.id }}"
+                        data-price="{{ s.default_price }}"
+                    >
+                        {{ s.name }}
+                    </option>
+
+                {% endfor %}
+
+            </select>
+
+        </td>
+
+
+        <td>
+
+            <input
+                name="service_worker[]"
+                placeholder="Nombre del trabajador"
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                name="service_quantity[]"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value="1"
+                oninput="calculate()"
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                name="service_price[]"
+                type="number"
+                min="0"
+                step="0.01"
+                value="0"
+                oninput="calculate()"
+            >
+
+        </td>
+
+
+        <td class="service-line-total">
+            $ 0
+        </td>
+
+
+        <td class="worker-share">
+            $ 0
+        </td>
+
+
+        <td class="business-share">
+            $ 0
+        </td>
+
+
+        <td>
+
+            <button
+                type="button"
+                class="btn btn-sm btn-danger"
+                onclick="
+                    this.closest('tr').remove();
+                    calculate();
+                "
+            >
+                X
+            </button>
+
+        </td>
+
+    </tr>
+
+</template>
+
 {% endblock %}
-{% block scripts %}<script>
-const taxRate={{ settings.tax_rate or 0 }};
-function money(n){return '$ '+Math.round(n).toLocaleString('es-CO')}
-function addProductRow(){document.getElementById('productsBody').append(document.getElementById('productTemplate').content.cloneNode(true));}
-function addServiceRow(){document.getElementById('servicesBody').append(document.getElementById('serviceTemplate').content.cloneNode(true));}
-function productChanged(sel){const o=sel.options[sel.selectedIndex],tr=sel.closest('tr');tr.querySelector('.stock').textContent=o.dataset.stock||'-';tr.querySelector('[name="price[]"]').value=o.dataset.price||0;calculate();}
-function serviceChanged(sel){const o=sel.options[sel.selectedIndex],tr=sel.closest('tr');tr.querySelector('[name="service_price[]"]').value=o.dataset.price||0;calculate();}
-function calculate(){let subtotal=0,workerTotal=0,businessTotal=0;
- document.querySelectorAll('#productsBody tr').forEach(tr=>{const sel=tr.querySelector('[name="product_id[]"]');const q=parseFloat(tr.querySelector('[name="quantity[]"]').value)||0,p=parseFloat(tr.querySelector('[name="price[]"]').value)||0,t=sel.value?q*p:0;subtotal+=t;tr.querySelector('.line-total').textContent=money(t)});
- document.querySelectorAll('#servicesBody tr').forEach(tr=>{const sel=tr.querySelector('[name="service_id[]"]');const q=parseFloat(tr.querySelector('[name="service_quantity[]"]').value)||0,p=parseFloat(tr.querySelector('[name="service_price[]"]').value)||0,t=sel.value?q*p:0,w=t*.70,b=t*.30;subtotal+=t;workerTotal+=w;businessTotal+=b;tr.querySelector('.service-line-total').textContent=money(t);tr.querySelector('.worker-share').textContent=money(w);tr.querySelector('.business-share').textContent=money(b)});
- const tax=subtotal*taxRate/100;document.getElementById('subtotal').textContent=money(subtotal);document.getElementById('tax').textContent=money(tax);document.getElementById('total').textContent=money(subtotal+tax);document.getElementById('workerTotal').textContent=money(workerTotal);document.getElementById('businessTotal').textContent=money(businessTotal);}
-addProductRow();calculate();
-</script>{% endblock %}
+
+
+
+{% block scripts %}
+
+<script>
+
+/* =========================================================
+   CONFIGURACIÓN
+========================================================= */
+
+const configuration =
+    document.getElementById(
+        "invoiceConfiguration"
+    );
+
+
+const taxRate =
+    parseFloat(
+        configuration.dataset.taxRate
+    ) || 0;
+
+
+
+/* =========================================================
+   FORMATO MONEDA
+========================================================= */
+
+function money(value) {
+
+    return "$ " +
+        Math.round(value)
+            .toLocaleString("es-CO");
+
+}
+
+
+
+/* =========================================================
+   AGREGAR PRODUCTO
+========================================================= */
+
+function addProductRow(data = null) {
+
+    const template =
+        document.getElementById(
+            "productTemplate"
+        );
+
+
+    const fragment =
+        template.content.cloneNode(true);
+
+
+    const row =
+        fragment.querySelector("tr");
+
+
+    document
+        .getElementById(
+            "productsBody"
+        )
+        .append(fragment);
+
+
+    if (data) {
+
+        const select =
+            row.querySelector(
+                '[name="product_id[]"]'
+            );
+
+
+        const quantity =
+            row.querySelector(
+                '[name="quantity[]"]'
+            );
+
+
+        const price =
+            row.querySelector(
+                '[name="price[]"]'
+            );
+
+
+        select.value =
+            data.id || "";
+
+
+        quantity.value =
+            data.quantity || 1;
+
+
+        price.value =
+            data.price || 0;
+
+
+        const option =
+            select.options[
+                select.selectedIndex
+            ];
+
+
+        if (option) {
+
+            row
+                .querySelector(".stock")
+                .textContent =
+                    option.dataset.stock || "-";
+
+        }
+
+    }
+
+
+    calculate();
+
+}
+
+
+
+/* =========================================================
+   AGREGAR SERVICIO
+========================================================= */
+
+function addServiceRow(data = null) {
+
+    const template =
+        document.getElementById(
+            "serviceTemplate"
+        );
+
+
+    const fragment =
+        template.content.cloneNode(true);
+
+
+    const row =
+        fragment.querySelector("tr");
+
+
+    document
+        .getElementById(
+            "servicesBody"
+        )
+        .append(fragment);
+
+
+    if (data) {
+
+        const select =
+            row.querySelector(
+                '[name="service_id[]"]'
+            );
+
+
+        select.value =
+            data.id || "";
+
+
+        row
+            .querySelector(
+                '[name="service_worker[]"]'
+            )
+            .value =
+                data.worker || "";
+
+
+        row
+            .querySelector(
+                '[name="service_quantity[]"]'
+            )
+            .value =
+                data.quantity || 1;
+
+
+        row
+            .querySelector(
+                '[name="service_price[]"]'
+            )
+            .value =
+                data.price || 0;
+
+    }
+
+
+    calculate();
+
+}
+
+
+
+/* =========================================================
+   CAMBIO PRODUCTO
+========================================================= */
+
+function productChanged(select) {
+
+    const option =
+        select.options[
+            select.selectedIndex
+        ];
+
+
+    const row =
+        select.closest("tr");
+
+
+    row
+        .querySelector(".stock")
+        .textContent =
+            option.dataset.stock || "-";
+
+
+    row
+        .querySelector(
+            '[name="price[]"]'
+        )
+        .value =
+            option.dataset.price || 0;
+
+
+    calculate();
+
+}
+
+
+
+/* =========================================================
+   CAMBIO SERVICIO
+========================================================= */
+
+function serviceChanged(select) {
+
+    const option =
+        select.options[
+            select.selectedIndex
+        ];
+
+
+    const row =
+        select.closest("tr");
+
+
+    row
+        .querySelector(
+            '[name="service_price[]"]'
+        )
+        .value =
+            option.dataset.price || 0;
+
+
+    calculate();
+
+}
+
+
+
+/* =========================================================
+   CALCULAR TOTALES
+========================================================= */
+
+function calculate() {
+
+    let subtotal = 0;
+
+    let workerTotal = 0;
+
+    let businessTotal = 0;
+
+
+
+    /* PRODUCTOS */
+
+    document
+        .querySelectorAll(
+            "#productsBody tr"
+        )
+        .forEach(row => {
+
+            const select =
+                row.querySelector(
+                    '[name="product_id[]"]'
+                );
+
+
+            const quantity =
+                parseFloat(
+                    row.querySelector(
+                        '[name="quantity[]"]'
+                    ).value
+                ) || 0;
+
+
+            const price =
+                parseFloat(
+                    row.querySelector(
+                        '[name="price[]"]'
+                    ).value
+                ) || 0;
+
+
+            const total =
+                select.value
+                    ? quantity * price
+                    : 0;
+
+
+            subtotal += total;
+
+
+            row
+                .querySelector(
+                    ".line-total"
+                )
+                .textContent =
+                    money(total);
+
+        });
+
+
+
+    /* SERVICIOS */
+
+    document
+        .querySelectorAll(
+            "#servicesBody tr"
+        )
+        .forEach(row => {
+
+            const select =
+                row.querySelector(
+                    '[name="service_id[]"]'
+                );
+
+
+            const quantity =
+                parseFloat(
+                    row.querySelector(
+                        '[name="service_quantity[]"]'
+                    ).value
+                ) || 0;
+
+
+            const price =
+                parseFloat(
+                    row.querySelector(
+                        '[name="service_price[]"]'
+                    ).value
+                ) || 0;
+
+
+            const total =
+                select.value
+                    ? quantity * price
+                    : 0;
+
+
+            const worker =
+                total * 0.70;
+
+
+            const business =
+                total * 0.30;
+
+
+            subtotal += total;
+
+            workerTotal += worker;
+
+            businessTotal += business;
+
+
+            row
+                .querySelector(
+                    ".service-line-total"
+                )
+                .textContent =
+                    money(total);
+
+
+            row
+                .querySelector(
+                    ".worker-share"
+                )
+                .textContent =
+                    money(worker);
+
+
+            row
+                .querySelector(
+                    ".business-share"
+                )
+                .textContent =
+                    money(business);
+
+        });
+
+
+
+    const tax =
+        subtotal * taxRate / 100;
+
+
+
+    document
+        .getElementById(
+            "subtotal"
+        )
+        .textContent =
+            money(subtotal);
+
+
+    document
+        .getElementById(
+            "tax"
+        )
+        .textContent =
+            money(tax);
+
+
+    document
+        .getElementById(
+            "total"
+        )
+        .textContent =
+            money(
+                subtotal + tax
+            );
+
+
+    document
+        .getElementById(
+            "workerTotal"
+        )
+        .textContent =
+            money(workerTotal);
+
+
+    document
+        .getElementById(
+            "businessTotal"
+        )
+        .textContent =
+            money(businessTotal);
+
+}
+
+
+
+/* =========================================================
+   RECUPERAR PRODUCTOS ANTERIORES
+========================================================= */
+
+const previousProductElements =
+    document.querySelectorAll(
+        ".previous-product"
+    );
+
+
+if (
+    previousProductElements.length > 0
+) {
+
+    previousProductElements
+        .forEach(element => {
+
+            const productId =
+                element.dataset.id;
+
+
+            if (!productId) {
+                return;
+            }
+
+
+            addProductRow({
+
+                id:
+                    productId,
+
+                quantity:
+                    element.dataset.quantity
+                    || 1,
+
+                price:
+                    element.dataset.price
+                    || 0
+
+            });
+
+        });
+
+}
+else {
+
+    addProductRow();
+
+}
+
+
+
+/* =========================================================
+   RECUPERAR SERVICIOS ANTERIORES
+========================================================= */
+
+const previousServiceElements =
+    document.querySelectorAll(
+        ".previous-service"
+    );
+
+
+if (
+    previousServiceElements.length > 0
+) {
+
+    previousServiceElements
+        .forEach(element => {
+
+            const serviceId =
+                element.dataset.id;
+
+
+            if (!serviceId) {
+                return;
+            }
+
+
+            addServiceRow({
+
+                id:
+                    serviceId,
+
+                worker:
+                    element.dataset.worker
+                    || "",
+
+                quantity:
+                    element.dataset.quantity
+                    || 1,
+
+                price:
+                    element.dataset.price
+                    || 0
+
+            });
+
+        });
+
+}
+
+
+
+/* =========================================================
+   CALCULAR AL INICIAR
+========================================================= */
+
+calculate();
+
+</script>
+
+{% endblock %}

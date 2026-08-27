@@ -1,4 +1,315 @@
-{% extends 'base.html' %}{% set heading='Remisión ' ~ invoice.number %}{% block content %}<div class="actions no-print" style="margin-bottom:15px"><a class="btn btn-primary" href="{{ url_for('invoice_pdf',invoice_id=invoice.id) }}">Descargar PDF</a><button class="btn btn-light" onclick="window.print()">Imprimir</button><a class="btn btn-success" href="{{ url_for('invoice_new') }}">Nueva remisión</a></div><div class="card invoice-paper"><div class="invoice-header"><div><h2>{{ settings.business_name }}</h2><div>{{ settings.nit }}</div><div>{{ settings.address }}</div><div>{{ settings.phone }} {{ settings.email }}</div></div><div class="invoice-number"><h2>REMISIÓN</h2><h3>{{ invoice.number }}</h3><div>{{ invoice.issued_at[:10] }}</div></div></div><div class="grid grid-2" style="margin-top:20px"><div><b>Cliente:</b> {{ invoice.customer_name }}<br><b>Documento:</b> {{ invoice.customer_document or '-' }}<br><b>Teléfono:</b> {{ invoice.customer_phone or '-' }}<br><b>Placa:</b> {{ invoice.vehicle_plate or '-' }}</div><div><b>Dirección:</b> {{ invoice.customer_address or '-' }}<br><b>Forma de pago:</b> {{ invoice.payment_method }}<br><b>Estado:</b> {{ invoice.status }}<br><b>Vendedor:</b> {{ invoice.salesperson_name or '-' }}<br><b>Usuario que registró:</b> {{ invoice.user_name or '-' }}</div></div>
-{% if items %}<h3 style="margin-top:22px">Productos</h3><div class="table-wrap"><table class="table"><thead><tr><th>Código</th><th>Descripción</th><th>Cantidad</th><th>Precio</th><th>Total</th></tr></thead><tbody>{% for i in items %}<tr><td>{{ i.code }}</td><td>{{ i.description }}</td><td>{{ i.quantity }}</td><td>{{ i.unit_price|money }}</td><td>{{ i.line_total|money }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
-{% if service_items %}<h3 style="margin-top:22px">Servicios</h3><div class="table-wrap"><table class="table"><thead><tr><th>Servicio</th><th>Cantidad</th><th>Valor</th><th>Total</th></tr></thead><tbody>{% for s in service_items %}<tr><td>{{ s.service_name }}</td><td>{{ s.quantity }}</td><td>{{ s.unit_price|money }}</td><td>{{ s.line_total|money }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
-<div class="totals"><div class="row"><span>Subtotal</span><b>{{ invoice.subtotal|money }}</b></div><div class="row"><span>Impuesto</span><b>{{ invoice.tax|money }}</b></div><div class="row grand"><span>Total</span><span>{{ invoice.total|money }}</span></div></div>{% if invoice.notes %}<p><b>Observaciones:</b> {{ invoice.notes }}</p>{% endif %}</div>{% endblock %}
+{% extends 'base.html' %}
+
+{% set heading = 'Remisión ' ~ invoice.number %}
+
+{% block content %}
+
+<div class="actions no-print" style="margin-bottom:15px">
+
+    <a
+        class="btn btn-primary"
+        href="{{ url_for('invoice_pdf', invoice_id=invoice.id) }}"
+    >
+        Descargar PDF
+    </a>
+
+    <button
+        class="btn btn-light"
+        onclick="window.print()"
+    >
+        Imprimir
+    </button>
+
+    <a
+        class="btn btn-success"
+        href="{{ url_for('invoice_new') }}"
+    >
+        Nueva remisión
+    </a>
+
+</div>
+
+
+<div class="card invoice-paper">
+
+    <!-- ENCABEZADO -->
+    <div class="invoice-header">
+
+        <div>
+
+            <h2>
+                {{ settings.business_name }}
+            </h2>
+
+            <div>
+                {{ settings.nit }}
+            </div>
+
+            <div>
+                {{ settings.address }}
+            </div>
+
+            <div>
+                {{ settings.phone }}
+                {{ settings.email }}
+            </div>
+
+        </div>
+
+
+        <div class="invoice-number">
+
+            <h2>
+                REMISIÓN
+            </h2>
+
+            <h3>
+                {{ invoice.number }}
+            </h3>
+
+            <div>
+                {{ invoice.issued_at[:10] }}
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- DATOS DEL CLIENTE / REMISIÓN -->
+    <div
+        class="grid grid-2"
+        style="margin-top:20px"
+    >
+
+        <div>
+
+            <b>Cliente:</b>
+            {{ invoice.customer_name }}
+
+            <br>
+
+            <b>Documento:</b>
+            {{ invoice.customer_document or '-' }}
+
+            <br>
+
+            <b>Teléfono:</b>
+            {{ invoice.customer_phone or '-' }}
+
+            <br>
+
+            <b>Placa:</b>
+            {{ invoice.vehicle_plate or '-' }}
+
+        </div>
+
+
+        <div>
+
+            <b>Dirección:</b>
+            {{ invoice.customer_address or '-' }}
+
+            <br>
+
+            <b>Forma de pago:</b>
+            {{ invoice.payment_method }}
+
+            <br>
+
+            <b>Estado:</b>
+            {{ invoice.status }}
+
+            <br>
+
+            <b>Vendedor:</b>
+            {{ invoice.salesperson_name or '-' }}
+
+            <br>
+
+            <b>Usuario que registró:</b>
+            {{ invoice.user_name or '-' }}
+
+        </div>
+
+    </div>
+
+
+    <!-- PRODUCTOS -->
+    {% if items %}
+
+        <h3 style="margin-top:22px">
+            Productos
+        </h3>
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>Cantidad</th>
+                        <th>Precio</th>
+                        <th>Total</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for i in items %}
+
+                        <tr>
+
+                            <td>
+                                {{ i.code }}
+                            </td>
+
+                            <td>
+                                {{ i.description }}
+                            </td>
+
+                            <td>
+                                {{ i.quantity }}
+                            </td>
+
+                            <td>
+                                {{ i.unit_price|money }}
+                            </td>
+
+                            <td>
+                                {{ i.line_total|money }}
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% endif %}
+
+
+    <!-- SERVICIOS -->
+    {% if service_items %}
+
+        <h3 style="margin-top:22px">
+            Servicios
+        </h3>
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+                        <th>Servicio</th>
+                        <th>Cantidad</th>
+                        <th>Valor</th>
+                        <th>Total</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for s in service_items %}
+
+                        <tr>
+
+                            <td>
+                                {{ s.service_name }}
+                            </td>
+
+                            <td>
+                                {{ s.quantity }}
+                            </td>
+
+                            <td>
+                                {{ s.unit_price|money }}
+                            </td>
+
+                            <td>
+                                {{ s.line_total|money }}
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% endif %}
+
+
+    <!-- TOTALES -->
+    <div class="totals">
+
+        <div class="row">
+
+            <span>
+                Subtotal
+            </span>
+
+            <b>
+                {{ invoice.subtotal|money }}
+            </b>
+
+        </div>
+
+
+        <div class="row">
+
+            <span>
+                Impuesto
+            </span>
+
+            <b>
+                {{ invoice.tax|money }}
+            </b>
+
+        </div>
+
+
+        <div class="row grand">
+
+            <span>
+                Total
+            </span>
+
+            <span>
+                {{ invoice.total|money }}
+            </span>
+
+        </div>
+
+    </div>
+
+
+    <!-- OBSERVACIONES -->
+    {% if invoice.notes %}
+
+        <p>
+            <b>Observaciones:</b>
+            {{ invoice.notes }}
+        </p>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}

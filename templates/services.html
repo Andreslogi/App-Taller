@@ -1,7 +1,923 @@
-{% extends 'base.html' %}{% set heading='Servicios' %}{% block content %}
-<div class="grid grid-4"><div class="card stat"><div class="label">Total servicios</div><div class="value">{{ summary.service_total|money }}</div></div><div class="card stat"><div class="label">Para trabajadores (70%)</div><div class="value">{{ summary.worker_total|money }}</div></div><div class="card stat"><div class="label">Para el negocio (30%)</div><div class="value">{{ summary.business_total|money }}</div></div><div class="card stat"><div class="label">Servicios registrados</div><div class="value">{{ summary.service_lines or 0 }}</div></div></div>
-{% if g.user.role == 'administrador' %}<form method="post" class="card"><h3>Agregar servicio</h3><div class="form-grid"><div class="form-group"><label>Nombre del servicio</label><input name="name" required placeholder="Ej: Cambio de aceite"></div><div class="form-group"><label>Valor predeterminado</label><input name="default_price" type="number" min="0" step="0.01" required></div></div><p class="muted">La distribución está configurada en 70% para el trabajador y 30% para el negocio.</p><button class="btn btn-primary">Guardar servicio</button></form>{% endif %}
-<div class="grid grid-2"><div class="card table-wrap"><h3>Catálogo de servicios</h3><table class="table"><thead><tr><th>Servicio</th><th>Valor</th><th>Trabajador</th><th>Negocio</th>{% if g.user.role == 'administrador' %}<th></th>{% endif %}</tr></thead><tbody>{% for s in services %}<tr><td>{{ s.name }}</td><td>{{ s.default_price|money }}</td><td>{{ s.worker_percentage|round(0) }}%</td><td>{{ s.business_percentage|round(0) }}%</td>{% if g.user.role == 'administrador' %}<td><a class="btn btn-sm btn-light" href="{{ url_for('service_edit',service_id=s.id) }}">Editar</a></td>{% endif %}</tr>{% else %}<tr><td colspan="5">Aún no hay servicios creados.</td></tr>{% endfor %}</tbody></table></div>
-<div class="card table-wrap"><h3>Acumulado por trabajador</h3><table class="table"><thead><tr><th>Trabajador</th><th>Valor servicios</th><th>Le corresponde</th><th>Negocio</th></tr></thead><tbody>{% for w in workers %}<tr><td>{{ w.worker_name }}</td><td>{{ w.service_total|money }}</td><td><b>{{ w.worker_total|money }}</b></td><td>{{ w.business_total|money }}</td></tr>{% else %}<tr><td colspan="4">Aún no hay servicios registrados.</td></tr>{% endfor %}</tbody></table></div></div>
-<div class="card table-wrap"><h3>Historial de servicios</h3><table class="table"><thead><tr><th>Fecha</th><th>Remisión</th><th>Placa</th><th>Cliente</th><th>Servicio</th><th>Trabajador</th><th>Total</th><th>70% trabajador</th><th>30% negocio</th></tr></thead><tbody>{% for h in history %}<tr><td>{{ h.issued_at[:10] }}</td><td>{{ h.number }}</td><td>{{ h.vehicle_plate or '-' }}</td><td>{{ h.customer_name }}</td><td>{{ h.service_name }}</td><td>{{ h.worker_name }}</td><td>{{ h.line_total|money }}</td><td><b>{{ h.worker_amount|money }}</b></td><td>{{ h.business_amount|money }}</td></tr>{% else %}<tr><td colspan="9">Aún no hay servicios registrados en remisiones.</td></tr>{% endfor %}</tbody></table></div>
+{% extends 'base.html' %}
+
+{% set heading='Servicios' %}
+
+{% block content %}
+
+
+<!-- =====================================================
+     FILTROS
+===================================================== -->
+
+<div class="card">
+
+    <h3>
+        Consultar servicios por fecha
+    </h3>
+
+    <form
+        method="get"
+        action="{{ url_for('services') }}"
+    >
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>
+                    Desde
+                </label>
+
+                <input
+                    type="date"
+                    name="date_from"
+                    id="dateFrom"
+                    value="{{ date_from }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Hasta
+                </label>
+
+                <input
+                    type="date"
+                    name="date_to"
+                    id="dateTo"
+                    value="{{ date_to }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Trabajador
+                </label>
+
+                <select name="worker">
+
+                    <option value="">
+                        Todos
+                    </option>
+
+                    {% for item in worker_options %}
+
+                        <option
+                            value="{{ item.worker_name }}"
+                            {% if worker_filter == item.worker_name %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ item.worker_name }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+                Filtrar
+            </button>
+
+
+            <a
+                href="{{ url_for('services') }}"
+                class="btn btn-light"
+            >
+                Limpiar
+            </a>
+
+
+            <button
+                class="btn btn-light"
+                type="button"
+                onclick="filterToday()"
+            >
+                Hoy
+            </button>
+
+
+            <button
+                class="btn btn-light"
+                type="button"
+                onclick="filterYesterday()"
+            >
+                Ayer
+            </button>
+
+
+            <button
+                class="btn btn-light"
+                type="button"
+                onclick="filterThisWeek()"
+            >
+                Esta semana
+            </button>
+
+
+            <button
+                class="btn btn-light"
+                type="button"
+                onclick="filterThisMonth()"
+            >
+                Este mes
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+
+<!-- =====================================================
+     INDICADORES
+===================================================== -->
+
+<div class="grid grid-4">
+
+
+    <div class="card stat">
+
+        <div class="label">
+            Total servicios
+        </div>
+
+        <div class="value">
+            {{ summary.service_total|money }}
+        </div>
+
+    </div>
+
+
+    <div class="card stat">
+
+        <div class="label">
+            Para trabajadores 70%
+        </div>
+
+        <div class="value">
+            {{ summary.worker_total|money }}
+        </div>
+
+    </div>
+
+
+    <div class="card stat">
+
+        <div class="label">
+            Para el negocio 30%
+        </div>
+
+        <div class="value">
+            {{ summary.business_total|money }}
+        </div>
+
+    </div>
+
+
+    <div class="card stat">
+
+        <div class="label">
+            Servicios registrados
+        </div>
+
+        <div class="value">
+            {{ summary.service_lines or 0 }}
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<!-- =====================================================
+     RESUMEN POR DÍA
+===================================================== -->
+
+<div class="card table-wrap">
+
+    <h3>
+        Resumen por día
+    </h3>
+
+    <table class="table">
+
+        <thead>
+
+            <tr>
+
+                <th>
+                    Fecha
+                </th>
+
+                <th>
+                    Servicios
+                </th>
+
+                <th>
+                    Total cobrado
+                </th>
+
+                <th>
+                    Trabajadores 70%
+                </th>
+
+                <th>
+                    Negocio 30%
+                </th>
+
+            </tr>
+
+        </thead>
+
+
+        <tbody>
+
+            {% for d in daily %}
+
+                <tr>
+
+                    <td>
+                        {{ d.service_date }}
+                    </td>
+
+                    <td>
+                        {{ d.service_lines }}
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{ d.service_total|money }}
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{ d.worker_total|money }}
+                    </td>
+
+                    <td>
+                        <strong>
+                            {{ d.business_total|money }}
+                        </strong>
+                    </td>
+
+                </tr>
+
+            {% else %}
+
+                <tr>
+
+                    <td colspan="5">
+                        No hay servicios en el período seleccionado.
+                    </td>
+
+                </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+
+<!-- =====================================================
+     CREAR SERVICIO
+===================================================== -->
+
+{% if g.user.role == 'administrador' %}
+
+<div class="card">
+
+    <form method="post">
+
+        <h3>
+            Agregar servicio
+        </h3>
+
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>
+                    Nombre del servicio
+                </label>
+
+                <input
+                    name="name"
+                    required
+                    placeholder="Ej: Cambio de aceite"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Valor predeterminado
+                </label>
+
+                <input
+                    name="default_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                >
+
+            </div>
+
+        </div>
+
+
+        <p class="muted">
+
+            La distribución está configurada
+            en 70% para el trabajador y
+            30% para el negocio.
+
+        </p>
+
+
+        <button
+            class="btn btn-primary"
+            type="submit"
+        >
+            Guardar servicio
+        </button>
+
+    </form>
+
+</div>
+
+{% endif %}
+
+
+
+<!-- =====================================================
+     CATÁLOGO
+===================================================== -->
+
+<div class="card table-wrap">
+
+    <h3>
+        Catálogo de servicios
+    </h3>
+
+
+    <table class="table">
+
+        <thead>
+
+            <tr>
+
+                <th>
+                    Servicio
+                </th>
+
+                <th>
+                    Valor
+                </th>
+
+                <th>
+                    Trabajador
+                </th>
+
+                <th>
+                    Negocio
+                </th>
+
+                {% if g.user.role == 'administrador' %}
+
+                    <th></th>
+
+                {% endif %}
+
+            </tr>
+
+        </thead>
+
+
+        <tbody>
+
+            {% for s in services %}
+
+                <tr>
+
+                    <td>
+                        {{ s.name }}
+                    </td>
+
+                    <td>
+                        {{ s.default_price|money }}
+                    </td>
+
+                    <td>
+                        {{ s.worker_percentage|round(0) }}%
+                    </td>
+
+                    <td>
+                        {{ s.business_percentage|round(0) }}%
+                    </td>
+
+                    {% if g.user.role == 'administrador' %}
+
+                        <td>
+
+                            <a
+                                class="btn btn-sm btn-light"
+                                href="{{ url_for(
+                                    'service_edit',
+                                    service_id=s.id
+                                ) }}"
+                            >
+                                Editar
+                            </a>
+
+                        </td>
+
+                    {% endif %}
+
+                </tr>
+
+            {% else %}
+
+                <tr>
+
+                    <td colspan="5">
+                        Aún no hay servicios creados.
+                    </td>
+
+                </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+
+<!-- =====================================================
+     DETALLE POR TRABAJADOR Y SERVICIO
+===================================================== -->
+
+<div class="card table-wrap">
+
+    <h3>
+        Detalle por trabajador y servicio
+    </h3>
+
+
+    <table class="table">
+
+        <thead>
+
+            <tr>
+
+                <th>
+                    Trabajador
+                </th>
+
+                <th>
+                    Servicio
+                </th>
+
+                <th>
+                    Veces realizado
+                </th>
+
+                <th>
+                    Cantidad total
+                </th>
+
+                <th>
+                    Valor servicios
+                </th>
+
+                <th>
+                    Le corresponde
+                </th>
+
+                <th>
+                    Negocio
+                </th>
+
+            </tr>
+
+        </thead>
+
+
+        <tbody>
+
+            {% for w in workers %}
+
+                <tr>
+
+                    <td>
+                        <strong>
+                            {{ w.worker_name }}
+                        </strong>
+                    </td>
+
+
+                    <td>
+                        {{ w.service_name }}
+                    </td>
+
+
+                    <td>
+                        {{ w.service_lines }}
+                    </td>
+
+
+                    <td>
+                        {{ w.quantity_total }}
+                    </td>
+
+
+                    <td>
+                        {{ w.service_total|money }}
+                    </td>
+
+
+                    <td>
+                        <strong>
+                            {{ w.worker_total|money }}
+                        </strong>
+                    </td>
+
+
+                    <td>
+                        {{ w.business_total|money }}
+                    </td>
+
+                </tr>
+
+            {% else %}
+
+                <tr>
+
+                    <td colspan="7">
+                        No hay servicios para el período seleccionado.
+                    </td>
+
+                </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+
+<!-- =====================================================
+     HISTORIAL COMPLETO
+===================================================== -->
+
+<div class="card table-wrap">
+
+    <h3>
+        Historial detallado de servicios
+    </h3>
+
+
+    <table class="table">
+
+        <thead>
+
+            <tr>
+
+                <th>
+                    Fecha
+                </th>
+
+                <th>
+                    Remisión
+                </th>
+
+                <th>
+                    Placa
+                </th>
+
+                <th>
+                    Cliente
+                </th>
+
+                <th>
+                    Servicio
+                </th>
+
+                <th>
+                    Trabajador
+                </th>
+
+                <th>
+                    Cantidad
+                </th>
+
+                <th>
+                    Valor servicio
+                </th>
+
+                <th>
+                    Total
+                </th>
+
+                <th>
+                    70% trabajador
+                </th>
+
+                <th>
+                    30% negocio
+                </th>
+
+            </tr>
+
+        </thead>
+
+
+        <tbody>
+
+            {% for h in history %}
+
+                <tr>
+
+                    <td>
+                        {{ h.issued_at[:10] }}
+                    </td>
+
+
+                    <td>
+                        {{ h.number }}
+                    </td>
+
+
+                    <td>
+                        {{ h.vehicle_plate or '-' }}
+                    </td>
+
+
+                    <td>
+                        {{ h.customer_name }}
+                    </td>
+
+
+                    <td>
+                        {{ h.service_name }}
+                    </td>
+
+
+                    <td>
+                        <strong>
+                            {{ h.worker_name }}
+                        </strong>
+                    </td>
+
+
+                    <td>
+                        {{ h.quantity }}
+                    </td>
+
+
+                    <td>
+                        {{ h.unit_price|money }}
+                    </td>
+
+
+                    <td>
+                        {{ h.line_total|money }}
+                    </td>
+
+
+                    <td>
+                        <strong>
+                            {{ h.worker_amount|money }}
+                        </strong>
+                    </td>
+
+
+                    <td>
+                        {{ h.business_amount|money }}
+                    </td>
+
+                </tr>
+
+            {% else %}
+
+                <tr>
+
+                    <td colspan="11">
+                        No hay servicios para el período seleccionado.
+                    </td>
+
+                </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+{% endblock %}
+
+
+
+{% block scripts %}
+
+<script>
+
+
+function formatDate(date) {
+
+    const year =
+        date.getFullYear();
+
+
+    const month =
+        String(
+            date.getMonth() + 1
+        ).padStart(
+            2,
+            "0"
+        );
+
+
+    const day =
+        String(
+            date.getDate()
+        ).padStart(
+            2,
+            "0"
+        );
+
+
+    return (
+        year
+        + "-"
+        + month
+        + "-"
+        + day
+    );
+
+}
+
+
+
+function applyDateRange(
+    start,
+    end
+) {
+
+    document
+        .getElementById(
+            "dateFrom"
+        )
+        .value =
+            formatDate(start);
+
+
+    document
+        .getElementById(
+            "dateTo"
+        )
+        .value =
+            formatDate(end);
+
+
+    document
+        .getElementById(
+            "dateFrom"
+        )
+        .closest("form")
+        .submit();
+
+}
+
+
+
+function filterToday() {
+
+    const today =
+        new Date();
+
+
+    applyDateRange(
+        today,
+        today
+    );
+
+}
+
+
+
+function filterYesterday() {
+
+    const yesterday =
+        new Date();
+
+
+    yesterday.setDate(
+        yesterday.getDate() - 1
+    );
+
+
+    applyDateRange(
+        yesterday,
+        yesterday
+    );
+
+}
+
+
+
+function filterThisWeek() {
+
+    const today =
+        new Date();
+
+
+    const start =
+        new Date(today);
+
+
+    const day =
+        today.getDay();
+
+
+    const diff =
+        day === 0
+            ? -6
+            : 1 - day;
+
+
+    start.setDate(
+        today.getDate()
+        + diff
+    );
+
+
+    applyDateRange(
+        start,
+        today
+    );
+
+}
+
+
+
+function filterThisMonth() {
+
+    const today =
+        new Date();
+
+
+    const start =
+        new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1
+        );
+
+
+    applyDateRange(
+        start,
+        today
+    );
+
+}
+
+
+</script>
+
 {% endblock %}

@@ -531,61 +531,399 @@ def salesperson_edit(salesperson_id: int):
 @app.route("/servicios", methods=["GET", "POST"])
 @login_required
 def services():
+
+    # =====================================================
+    # CREAR SERVICIO
+    # =====================================================
+
     if request.method == "POST":
+
         if g.user["role"] != "administrador":
-            flash("Solo el administrador puede crear servicios.", "danger")
-            return redirect(url_for("services"))
+
+            flash(
+                "Solo el administrador puede crear servicios.",
+                "danger"
+            )
+
+            return redirect(
+                url_for("services")
+            )
+
         try:
-            name = request.form.get("name", "").strip()
-            price = float(parse_decimal(request.form.get("default_price")))
-            if not name:
-                raise ValueError("El nombre del servicio es obligatorio.")
-            if price < 0:
-                raise ValueError("El valor del servicio no puede ser negativo.")
-            with db_conn() as conn:
-                conn.execute(
-                    """INSERT INTO services(name,default_price,worker_percentage,business_percentage)
-                    VALUES(?,?,70,30)""",
-                    (name, price),
+
+            name = request.form.get(
+                "name",
+                ""
+            ).strip()
+
+            price = float(
+                parse_decimal(
+                    request.form.get(
+                        "default_price"
+                    )
                 )
-            flash("Servicio creado correctamente.", "success")
-            return redirect(url_for("services"))
+            )
+
+            if not name:
+
+                raise ValueError(
+                    "El nombre del servicio es obligatorio."
+                )
+
+            if price < 0:
+
+                raise ValueError(
+                    "El valor del servicio no puede ser negativo."
+                )
+
+            with db_conn() as conn:
+
+                conn.execute(
+                    """
+                    INSERT INTO services(
+                        name,
+                        default_price,
+                        worker_percentage,
+                        business_percentage
+                    )
+                    VALUES(?,?,70,30)
+                    """,
+                    (
+                        name,
+                        price
+                    )
+                )
+
+            flash(
+                "Servicio creado correctamente.",
+                "success"
+            )
+
+            return redirect(
+                url_for("services")
+            )
+
         except IntegrityError:
-            flash("Ya existe un servicio con ese nombre.", "danger")
+
+            flash(
+                "Ya existe un servicio con ese nombre.",
+                "danger"
+            )
+
         except ValueError as exc:
-            flash(str(exc), "danger")
+
+            flash(
+                str(exc),
+                "danger"
+            )
+
+
+    # =====================================================
+    # FILTROS
+    # =====================================================
+
+    date_from = request.args.get(
+        "date_from",
+        ""
+    ).strip()
+
+    date_to = request.args.get(
+        "date_to",
+        ""
+    ).strip()
+
+    worker_filter = request.args.get(
+        "worker",
+        ""
+    ).strip()
+
+
+    filters = []
+    params = []
+
+
+    if date_from:
+
+        filters.append(
+            "DATE(i.issued_at) >= ?"
+        )
+
+        params.append(
+            date_from
+        )
+
+
+    if date_to:
+
+        filters.append(
+            "DATE(i.issued_at) <= ?"
+        )
+
+        params.append(
+            date_to
+        )
+
+
+    if worker_filter:
+
+        filters.append(
+            "LOWER(TRIM(isi.worker_name)) = LOWER(?)"
+        )
+
+        params.append(
+            worker_filter
+        )
+
+
+    where_clause = ""
+
+    if filters:
+
+        where_clause = (
+            " WHERE "
+            + " AND ".join(filters)
+        )
+
+
+    # =====================================================
+    # CONSULTAS
+    # =====================================================
 
     with db_conn() as conn:
-        catalog = conn.execute(
-            "SELECT * FROM services WHERE active=1 ORDER BY name"
-        ).fetchall()
-        history = conn.execute(
-            """SELECT isi.*, i.number, i.issued_at, i.customer_name, i.vehicle_plate
-               FROM invoice_service_items isi
-               JOIN invoices i ON i.id=isi.invoice_id
-               ORDER BY isi.id DESC LIMIT 200"""
-        ).fetchall()
-        summary = conn.execute(
-            """SELECT
-                   COUNT(*) AS service_lines,
-                   COALESCE(SUM(line_total),0) AS service_total,
-                   COALESCE(SUM(worker_amount),0) AS worker_total,
-                   COALESCE(SUM(business_amount),0) AS business_total
-               FROM invoice_service_items"""
-        ).fetchone()
-        workers = conn.execute(
-            """SELECT worker_name,
-                   COUNT(*) AS service_lines,
-                   COALESCE(SUM(line_total),0) AS service_total,
-                   COALESCE(SUM(worker_amount),0) AS worker_total,
-                   COALESCE(SUM(business_amount),0) AS business_total
-               FROM invoice_service_items
-               WHERE TRIM(worker_name)<>''
-               GROUP BY worker_name
-               ORDER BY worker_total DESC"""
-        ).fetchall()
-    return render_template("services.html", services=catalog, history=history, summary=summary, workers=workers)
 
+        # ================================================
+        # CATÁLOGO DE SERVICIOS
+        # ================================================
+
+        catalog = conn.execute(
+            """
+            SELECT *
+            FROM services
+            WHERE active=1
+            ORDER BY name
+            """
+        ).fetchall()
+
+
+        # ================================================
+        # HISTORIAL FILTRADO
+        # ================================================
+
+        history = conn.execute(
+            f"""
+            SELECT
+                isi.*,
+                i.number,
+                i.issued_at,
+                i.customer_name,
+                i.vehicle_plate
+
+            FROM invoice_service_items isi
+
+            JOIN invoices i
+                ON i.id = isi.invoice_id
+
+            {where_clause}
+
+            ORDER BY
+                i.issued_at DESC,
+                isi.id DESC
+
+            LIMIT 1000
+            """,
+            tuple(params)
+        ).fetchall()
+
+
+        # ================================================
+        # RESUMEN GENERAL FILTRADO
+        # ================================================
+
+        summary = conn.execute(
+            f"""
+            SELECT
+
+                COUNT(*) AS service_lines,
+
+                COALESCE(
+                    SUM(isi.line_total),
+                    0
+                ) AS service_total,
+
+                COALESCE(
+                    SUM(isi.worker_amount),
+                    0
+                ) AS worker_total,
+
+                COALESCE(
+                    SUM(isi.business_amount),
+                    0
+                ) AS business_total
+
+            FROM invoice_service_items isi
+
+            JOIN invoices i
+                ON i.id = isi.invoice_id
+
+            {where_clause}
+            """,
+            tuple(params)
+        ).fetchone()
+
+
+        # ================================================
+        # DETALLE POR TRABAJADOR Y SERVICIO
+        # ================================================
+
+        worker_filters = list(filters)
+        worker_params = list(params)
+
+        worker_filters.append(
+            "TRIM(isi.worker_name) <> ''"
+        )
+
+        worker_where = (
+            " WHERE "
+            + " AND ".join(
+                worker_filters
+            )
+        )
+
+
+        workers = conn.execute(
+            f"""
+            SELECT
+
+                isi.worker_name,
+
+                isi.service_name,
+
+                COUNT(*) AS service_lines,
+
+                COALESCE(
+                    SUM(isi.quantity),
+                    0
+                ) AS quantity_total,
+
+                COALESCE(
+                    SUM(isi.line_total),
+                    0
+                ) AS service_total,
+
+                COALESCE(
+                    SUM(isi.worker_amount),
+                    0
+                ) AS worker_total,
+
+                COALESCE(
+                    SUM(isi.business_amount),
+                    0
+                ) AS business_total
+
+            FROM invoice_service_items isi
+
+            JOIN invoices i
+                ON i.id = isi.invoice_id
+
+            {worker_where}
+
+            GROUP BY
+                isi.worker_name,
+                isi.service_name
+
+            ORDER BY
+                isi.worker_name ASC,
+                isi.service_name ASC
+            """,
+            tuple(worker_params)
+        ).fetchall()
+
+
+        # ================================================
+        # LISTADO DE TRABAJADORES PARA FILTRO
+        # ================================================
+
+        worker_options = conn.execute(
+            """
+            SELECT DISTINCT
+                worker_name
+
+            FROM invoice_service_items
+
+            WHERE
+                TRIM(worker_name) <> ''
+
+            ORDER BY
+                worker_name
+            """
+        ).fetchall()
+
+
+        # ================================================
+        # RESUMEN POR DÍA
+        # ================================================
+
+        daily = conn.execute(
+            f"""
+            SELECT
+
+                DATE(i.issued_at) AS service_date,
+
+                COUNT(*) AS service_lines,
+
+                COALESCE(
+                    SUM(isi.line_total),
+                    0
+                ) AS service_total,
+
+                COALESCE(
+                    SUM(isi.worker_amount),
+                    0
+                ) AS worker_total,
+
+                COALESCE(
+                    SUM(isi.business_amount),
+                    0
+                ) AS business_total
+
+            FROM invoice_service_items isi
+
+            JOIN invoices i
+                ON i.id = isi.invoice_id
+
+            {where_clause}
+
+            GROUP BY
+                DATE(i.issued_at)
+
+            ORDER BY
+                DATE(i.issued_at) DESC
+            """,
+            tuple(params)
+        ).fetchall()
+
+
+    return render_template(
+        "services.html",
+
+        services=catalog,
+
+        history=history,
+
+        summary=summary,
+
+        workers=workers,
+
+        worker_options=worker_options,
+
+        daily=daily,
+
+        date_from=date_from,
+
+        date_to=date_to,
+
+        worker_filter=worker_filter
+    )
 
 @app.route("/servicios/<int:service_id>/editar", methods=["GET", "POST"])
 @role_required("administrador")
@@ -632,6 +970,8 @@ def invoices():
 @app.route("/facturas/nueva", methods=["GET", "POST"])
 @login_required
 def invoice_new():
+
+    form_data = request.form if request.method == "POST" else {}
     if request.method == "POST":
         try:
             customer_name = request.form.get("customer_name", "Consumidor final").strip() or "Consumidor final"
@@ -783,10 +1123,13 @@ def invoice_new():
         ).fetchall()
         settings = get_settings(conn)
     return render_template(
-        "invoice_form.html", products=product_rows, services=service_rows,
-        salespeople=salesperson_rows, settings=settings
+        "invoice_form.html",
+        products=product_rows,
+        services=service_rows,
+        salespeople=salesperson_rows,
+        settings=settings,
+        form_data=form_data
     )
-
 
 @app.route("/facturas/<int:invoice_id>")
 @login_required
