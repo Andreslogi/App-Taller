@@ -24,7 +24,6 @@
                 >
             </div>
 
-
             <div class="form-group">
                 <label>Documento</label>
 
@@ -34,7 +33,6 @@
                 >
             </div>
 
-
             <div class="form-group">
                 <label>Teléfono</label>
 
@@ -43,7 +41,6 @@
                     value="{{ request.form.get('customer_phone', '') }}"
                 >
             </div>
-
 
             <div class="form-group">
                 <label>Correo</label>
@@ -55,7 +52,6 @@
                 >
             </div>
 
-
             <div class="form-group">
                 <label>Dirección</label>
 
@@ -64,7 +60,6 @@
                     value="{{ request.form.get('customer_address', '') }}"
                 >
             </div>
-
 
             <div class="form-group">
                 <label>Placa del vehículo</label>
@@ -78,7 +73,6 @@
                     oninput="this.value = this.value.toUpperCase()"
                 >
             </div>
-
 
             <div class="form-group">
 
@@ -106,8 +100,7 @@
                 </select>
 
                 <div class="muted">
-                    Identifica al vendedor real aunque se utilice
-                    el usuario genérico "vendedor".
+                    Identifica al vendedor real aunque se use el usuario genérico "vendedor".
                 </div>
 
             </div>
@@ -117,12 +110,18 @@
     </div>
 
 
-
     <!-- =====================================================
          PRODUCTOS
     ====================================================== -->
 
-    <div class="card">
+    <div
+        class="card"
+        style="
+            overflow: visible;
+            position: relative;
+            z-index: 20;
+        "
+    >
 
         <div
             class="actions"
@@ -136,12 +135,10 @@
                 </h3>
 
                 <div class="muted">
-                    Los productos vendidos descuentan
-                    automáticamente el inventario.
+                    Los productos vendidos descuentan automáticamente el inventario.
                 </div>
 
             </div>
-
 
             <button
                 class="btn btn-light"
@@ -154,23 +151,34 @@
         </div>
 
 
-        <div class="table-wrap">
+        <div
+            class="table-wrap"
+            style="
+                overflow: visible;
+                position: relative;
+            "
+        >
 
-            <table class="table invoice-items">
+            <table
+                class="table invoice-items"
+                style="
+                    position: relative;
+                    overflow: visible;
+                "
+            >
 
                 <thead>
 
                     <tr>
-                        <th>Producto</th>
-                        <th>Disponible</th>
-                        <th>Cantidad</th>
-                        <th>Precio unitario</th>
-                        <th>Total</th>
-                        <th></th>
+                        <th style="width: 42%;">Producto</th>
+                        <th style="width: 10%;">Disponible</th>
+                        <th style="width: 12%;">Cantidad</th>
+                        <th style="width: 14%;">Precio unitario</th>
+                        <th style="width: 14%;">Total</th>
+                        <th style="width: 8%;"></th>
                     </tr>
 
                 </thead>
-
 
                 <tbody id="productsBody"></tbody>
 
@@ -179,7 +187,6 @@
         </div>
 
     </div>
-
 
 
     <!-- =====================================================
@@ -200,12 +207,10 @@
                 </h3>
 
                 <div class="muted">
-                    Cada servicio distribuye automáticamente
-                    70% para el trabajador y 30% para el negocio.
+                    Cada servicio distribuye automáticamente 70% para el trabajador y 30% para el negocio.
                 </div>
 
             </div>
-
 
             <button
                 class="btn btn-light"
@@ -237,7 +242,6 @@
 
                 </thead>
 
-
                 <tbody id="servicesBody"></tbody>
 
             </table>
@@ -245,7 +249,6 @@
         </div>
 
     </div>
-
 
 
     <!-- =====================================================
@@ -257,39 +260,18 @@
         <div class="totals">
 
             <div class="row">
-
                 <span>Subtotal</span>
-
-                <strong id="subtotal">
-                    $ 0
-                </strong>
-
+                <strong id="subtotal">$ 0</strong>
             </div>
-
 
             <div class="row">
-
-                <span>
-                    Impuesto ({{ settings.tax_rate }}%)
-                </span>
-
-                <strong id="tax">
-                    $ 0
-                </strong>
-
+                <span>Impuesto ({{ settings.tax_rate }}%)</span>
+                <strong id="tax">$ 0</strong>
             </div>
 
-
             <div class="row grand">
-
-                <span>
-                    Total remisión
-                </span>
-
-                <span id="total">
-                    $ 0
-                </span>
-
+                <span>Total remisión</span>
+                <span id="total">$ 0</span>
             </div>
 
         </div>
@@ -324,7 +306,6 @@
 
             </div>
 
-
             <div>
 
                 <div class="muted">
@@ -348,9 +329,8 @@
     </div>
 
 
-
     <!-- =====================================================
-         PAGO / OBSERVACIONES
+         PAGO
     ====================================================== -->
 
     <div class="card">
@@ -377,7 +357,6 @@
                         Efectivo
                     </option>
 
-
                     <option
                         value="Transferencia"
                         {% if payment == 'Transferencia' %}
@@ -387,7 +366,6 @@
                         Transferencia
                     </option>
 
-
                     <option
                         value="Tarjeta"
                         {% if payment == 'Tarjeta' %}
@@ -396,7 +374,6 @@
                     >
                         Tarjeta
                     </option>
-
 
                     <option
                         value="Crédito"
@@ -438,10 +415,8 @@
 </form>
 
 
-
 <!-- =========================================================
-     DATOS PARA JAVASCRIPT
-     Jinja queda únicamente en HTML.
+     CONFIGURACIÓN
 ========================================================= -->
 
 <div
@@ -450,6 +425,10 @@
     style="display: none;"
 ></div>
 
+
+<!-- =========================================================
+     PRODUCTOS ANTERIORES
+========================================================= -->
 
 <div
     id="previousProducts"
@@ -471,6 +450,10 @@
 
 </div>
 
+
+<!-- =========================================================
+     SERVICIOS ANTERIORES
+========================================================= -->
 
 <div
     id="previousServices"
@@ -494,7 +477,6 @@
 </div>
 
 
-
 <!-- =========================================================
      TEMPLATE PRODUCTO
 ========================================================= -->
@@ -503,40 +485,145 @@
 
     <tr>
 
-        <td>
+        <!-- PRODUCTO -->
+        <td
+            style="
+                min-width: 480px;
+                position: relative;
+                overflow: visible;
+            "
+        >
 
-            <select
-                name="product_id[]"
-                onchange="productChanged(this)"
+            <div
+                class="product-combobox"
+                style="
+                    position: relative;
+                    width: 100%;
+                    overflow: visible;
+                "
             >
 
-                <option value="">
-                    Seleccione...
-                </option>
+                <input
+                    type="text"
+                    class="product-search"
+                    placeholder="Buscar repuesto..."
+                    autocomplete="off"
+                    onfocus="openProductList(this)"
+                    onclick="openProductList(this)"
+                    oninput="searchProduct(this)"
+                    style="
+                        width: 100%;
+                        box-sizing: border-box;
+                    "
+                >
+
+                <input
+                    type="hidden"
+                    name="product_id[]"
+                    class="product-id"
+                >
 
 
-                {% for p in products %}
+                <div
+                    class="product-results"
+                    style="
+                        display: none;
 
-                    <option
-                        value="{{ p.id }}"
-                        data-stock="{{ p.stock }}"
-                        data-price="{{ p.sale_price }}"
-                    >
-                        {{ p.code }} - {{ p.description }}
-                    </option>
+                        position: absolute;
 
-                {% endfor %}
+                        top: calc(100% + 4px);
+                        left: 0;
 
-            </select>
+                        width: 620px;
+
+                        max-height: 560px;
+
+                        overflow-y: auto;
+                        overflow-x: hidden;
+
+                        background: #ffffff;
+
+                        border: 1px solid #cbd5e1;
+                        border-radius: 8px;
+
+                        z-index: 9999999;
+
+                        box-shadow:
+                            0 12px 30px
+                            rgba(0,0,0,0.18);
+                    "
+                >
+
+                    {% for p in products %}
+
+                        <div
+                            class="product-option"
+
+                            data-id="{{ p.id }}"
+                            data-stock="{{ p.stock }}"
+                            data-price="{{ p.sale_price }}"
+
+                            data-name="{{ p.code }} - {{ p.description }}"
+
+                            data-search="{{ (p.code ~ ' ' ~ p.description)|lower }}"
+
+                            onmousedown="selectProduct(this)"
+
+                            style="
+                                padding: 10px 14px;
+
+                                cursor: pointer;
+
+                                border-bottom:
+                                    1px solid #edf2f7;
+
+                                background: #ffffff;
+                            "
+                        >
+
+                            <div
+                                style="
+                                    font-weight: 600;
+                                    color: #172033;
+                                "
+                            >
+                                {{ p.code }} - {{ p.description }}
+                            </div>
+
+                            <div
+                                style="
+                                    font-size: 12px;
+                                    color: #64748b;
+                                    margin-top: 3px;
+                                "
+                            >
+                                Stock:
+                                {{ p.stock }}
+
+                                |
+
+                                Precio:
+                                {{ p.sale_price|money }}
+                            </div>
+
+                        </div>
+
+                    {% endfor %}
+
+                </div>
+
+            </div>
 
         </td>
 
 
+        <!-- STOCK -->
         <td class="stock">
             -
         </td>
 
 
+        <!-- CANTIDAD -->
         <td>
 
             <input
@@ -551,6 +638,7 @@
         </td>
 
 
+        <!-- PRECIO -->
         <td>
 
             <input
@@ -565,11 +653,13 @@
         </td>
 
 
+        <!-- TOTAL -->
         <td class="line-total">
             $ 0
         </td>
 
 
+        <!-- ELIMINAR -->
         <td>
 
             <button
@@ -590,7 +680,6 @@
 </template>
 
 
-
 <!-- =========================================================
      TEMPLATE SERVICIO
 ========================================================= -->
@@ -609,7 +698,6 @@
                 <option value="">
                     Seleccione...
                 </option>
-
 
                 {% for s in services %}
 
@@ -702,7 +790,6 @@
 {% endblock %}
 
 
-
 {% block scripts %}
 
 <script>
@@ -716,16 +803,14 @@ const configuration =
         "invoiceConfiguration"
     );
 
-
 const taxRate =
     parseFloat(
         configuration.dataset.taxRate
     ) || 0;
 
 
-
 /* =========================================================
-   FORMATO MONEDA
+   MONEDA
 ========================================================= */
 
 function money(value) {
@@ -736,6 +821,274 @@ function money(value) {
 
 }
 
+
+/* =========================================================
+   ABRIR LISTA DE PRODUCTOS
+========================================================= */
+
+function openProductList(input) {
+
+    closeAllProductLists(
+        input.closest(".product-combobox")
+    );
+
+
+    const container =
+        input.closest(
+            ".product-combobox"
+        );
+
+
+    const results =
+        container.querySelector(
+            ".product-results"
+        );
+
+
+    const options =
+        results.querySelectorAll(
+            ".product-option"
+        );
+
+
+    const search =
+        input.value
+            .toLowerCase()
+            .trim();
+
+
+    options.forEach(option => {
+
+        const text =
+            option.dataset.search || "";
+
+
+        const show =
+            search === ""
+            ||
+            text.includes(search);
+
+
+        option.style.display =
+            show
+                ? "block"
+                : "none";
+
+    });
+
+
+    results.style.display =
+        "block";
+
+}
+
+
+/* =========================================================
+   BUSCAR PRODUCTO
+========================================================= */
+
+function searchProduct(input) {
+
+    const container =
+        input.closest(
+            ".product-combobox"
+        );
+
+
+    const results =
+        container.querySelector(
+            ".product-results"
+        );
+
+
+    const options =
+        results.querySelectorAll(
+            ".product-option"
+        );
+
+
+    const search =
+        input.value
+            .toLowerCase()
+            .trim();
+
+
+    /*
+        Al escribir nuevamente,
+        quitamos la selección previa
+    */
+
+    container
+        .querySelector(
+            ".product-id"
+        )
+        .value = "";
+
+
+    let visibleCount = 0;
+
+
+    options.forEach(option => {
+
+        const text =
+            option.dataset.search || "";
+
+
+        const matches =
+            search === ""
+            ||
+            text.includes(search);
+
+
+        option.style.display =
+            matches
+                ? "block"
+                : "none";
+
+
+        if (matches) {
+
+            visibleCount++;
+
+        }
+
+    });
+
+
+    results.style.display =
+        visibleCount > 0
+            ? "block"
+            : "none";
+
+}
+
+
+/* =========================================================
+   SELECCIONAR PRODUCTO
+========================================================= */
+
+function selectProduct(option) {
+
+    const container =
+        option.closest(
+            ".product-combobox"
+        );
+
+
+    const row =
+        option.closest("tr");
+
+
+    const searchInput =
+        container.querySelector(
+            ".product-search"
+        );
+
+
+    const productId =
+        container.querySelector(
+            ".product-id"
+        );
+
+
+    const results =
+        container.querySelector(
+            ".product-results"
+        );
+
+
+    searchInput.value =
+        option.dataset.name;
+
+
+    productId.value =
+        option.dataset.id;
+
+
+    row
+        .querySelector(
+            ".stock"
+        )
+        .textContent =
+            option.dataset.stock || "-";
+
+
+    row
+        .querySelector(
+            '[name="price[]"]'
+        )
+        .value =
+            option.dataset.price || 0;
+
+
+    results.style.display =
+        "none";
+
+
+    calculate();
+
+}
+
+
+/* =========================================================
+   CERRAR LISTAS
+========================================================= */
+
+function closeAllProductLists(
+    exceptContainer = null
+) {
+
+    document
+        .querySelectorAll(
+            ".product-combobox"
+        )
+        .forEach(container => {
+
+            if (
+                exceptContainer
+                &&
+                container === exceptContainer
+            ) {
+
+                return;
+
+            }
+
+
+            const results =
+                container.querySelector(
+                    ".product-results"
+                );
+
+
+            if (results) {
+
+                results.style.display =
+                    "none";
+
+            }
+
+        });
+
+}
+
+
+document.addEventListener(
+    "mousedown",
+    function(event) {
+
+        if (
+            !event.target.closest(
+                ".product-combobox"
+            )
+        ) {
+
+            closeAllProductLists();
+
+        }
+
+    }
+);
 
 
 /* =========================================================
@@ -767,50 +1120,88 @@ function addProductRow(data = null) {
 
     if (data) {
 
-        const select =
+        const container =
             row.querySelector(
-                '[name="product_id[]"]'
+                ".product-combobox"
             );
 
 
-        const quantity =
-            row.querySelector(
-                '[name="quantity[]"]'
+        const searchInput =
+            container.querySelector(
+                ".product-search"
             );
 
 
-        const price =
-            row.querySelector(
-                '[name="price[]"]'
+        const productId =
+            container.querySelector(
+                ".product-id"
             );
 
 
-        select.value =
-            data.id || "";
+        const options =
+            container.querySelectorAll(
+                ".product-option"
+            );
 
 
-        quantity.value =
-            data.quantity || 1;
+        let selectedOption = null;
 
 
-        price.value =
-            data.price || 0;
+        options.forEach(option => {
+
+            if (
+                String(
+                    option.dataset.id
+                )
+                ===
+                String(
+                    data.id
+                )
+            ) {
+
+                selectedOption =
+                    option;
+
+            }
+
+        });
 
 
-        const option =
-            select.options[
-                select.selectedIndex
-            ];
+        if (selectedOption) {
+
+            searchInput.value =
+                selectedOption.dataset.name;
 
 
-        if (option) {
+            productId.value =
+                selectedOption.dataset.id;
+
 
             row
-                .querySelector(".stock")
+                .querySelector(
+                    ".stock"
+                )
                 .textContent =
-                    option.dataset.stock || "-";
+                    selectedOption.dataset.stock
+                    || "-";
 
         }
+
+
+        row
+            .querySelector(
+                '[name="quantity[]"]'
+            )
+            .value =
+                data.quantity || 1;
+
+
+        row
+            .querySelector(
+                '[name="price[]"]'
+            )
+            .value =
+                data.price || 0;
 
     }
 
@@ -818,7 +1209,6 @@ function addProductRow(data = null) {
     calculate();
 
 }
-
 
 
 /* =========================================================
@@ -891,43 +1281,6 @@ function addServiceRow(data = null) {
 }
 
 
-
-/* =========================================================
-   CAMBIO PRODUCTO
-========================================================= */
-
-function productChanged(select) {
-
-    const option =
-        select.options[
-            select.selectedIndex
-        ];
-
-
-    const row =
-        select.closest("tr");
-
-
-    row
-        .querySelector(".stock")
-        .textContent =
-            option.dataset.stock || "-";
-
-
-    row
-        .querySelector(
-            '[name="price[]"]'
-        )
-        .value =
-            option.dataset.price || 0;
-
-
-    calculate();
-
-}
-
-
-
 /* =========================================================
    CAMBIO SERVICIO
 ========================================================= */
@@ -957,19 +1310,15 @@ function serviceChanged(select) {
 }
 
 
-
 /* =========================================================
-   CALCULAR TOTALES
+   CALCULAR
 ========================================================= */
 
 function calculate() {
 
     let subtotal = 0;
-
     let workerTotal = 0;
-
     let businessTotal = 0;
-
 
 
     /* PRODUCTOS */
@@ -980,7 +1329,7 @@ function calculate() {
         )
         .forEach(row => {
 
-            const select =
+            const productId =
                 row.querySelector(
                     '[name="product_id[]"]'
                 );
@@ -1003,7 +1352,7 @@ function calculate() {
 
 
             const total =
-                select.value
+                productId.value
                     ? quantity * price
                     : 0;
 
@@ -1019,7 +1368,6 @@ function calculate() {
                     money(total);
 
         });
-
 
 
     /* SERVICIOS */
@@ -1099,10 +1447,8 @@ function calculate() {
         });
 
 
-
     const tax =
         subtotal * taxRate / 100;
-
 
 
     document
@@ -1149,9 +1495,8 @@ function calculate() {
 }
 
 
-
 /* =========================================================
-   RECUPERAR PRODUCTOS ANTERIORES
+   RESTAURAR PRODUCTOS
 ========================================================= */
 
 const previousProductElements =
@@ -1172,7 +1517,9 @@ if (
 
 
             if (!productId) {
+
                 return;
+
             }
 
 
@@ -1201,9 +1548,8 @@ else {
 }
 
 
-
 /* =========================================================
-   RECUPERAR SERVICIOS ANTERIORES
+   RESTAURAR SERVICIOS
 ========================================================= */
 
 const previousServiceElements =
@@ -1224,7 +1570,9 @@ if (
 
 
             if (!serviceId) {
+
                 return;
+
             }
 
 
@@ -1252,9 +1600,8 @@ if (
 }
 
 
-
 /* =========================================================
-   CALCULAR AL INICIAR
+   CÁLCULO INICIAL
 ========================================================= */
 
 calculate();
