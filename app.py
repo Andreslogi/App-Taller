@@ -435,39 +435,229 @@ def product_edit(product_id: int):
 @app.route("/movimientos", methods=["GET", "POST"])
 @role_required("administrador")
 def movements():
+
     if request.method == "POST":
+
         try:
-            product_id = int(request.form["product_id"])
-            movement_type = request.form["movement_type"]
-            quantity = float(parse_decimal(request.form["quantity"]))
-            if quantity <= 0:
-                raise ValueError("La cantidad debe ser mayor que cero.")
-            signed = quantity if movement_type == "Entrada" else -quantity
-            with db_conn() as conn:
-                product = conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
-                if not product:
-                    raise ValueError("Producto no encontrado.")
-                if product["stock"] + signed < 0:
-                    raise ValueError("La salida supera el inventario disponible.")
-                conn.execute("UPDATE products SET stock=stock+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (signed, product_id))
-                conn.execute(
-                    "INSERT INTO movements(product_id,movement_type,quantity,reference,notes,created_at,user_id) VALUES(?,?,?,?,?,?,?)",
-                    (product_id, movement_type, quantity, request.form.get("reference", ""), request.form.get("notes", ""), datetime.now().isoformat(timespec="seconds"), g.user["id"]),
+
+            product_id = int(
+                request.form["product_id"]
+            )
+
+            movement_type = request.form[
+                "movement_type"
+            ].strip()
+
+            # Trabajamos internamente con Decimal
+            # para que sea compatible con PostgreSQL.
+            quantity = parse_decimal(
+                request.form["quantity"]
+            )
+
+            if quantity <= Decimal("0"):
+
+                raise ValueError(
+                    "La cantidad debe ser mayor que cero."
                 )
-            flash("Movimiento registrado.", "success")
-            return redirect(url_for("movements"))
-        except (ValueError, KeyError) as exc:
-            flash(str(exc), "danger")
+
+            if movement_type not in (
+                "Entrada",
+                "Salida"
+            ):
+
+                raise ValueError(
+                    "Tipo de movimiento inválido."
+                )
+
+
+            signed = (
+                quantity
+                if movement_type == "Entrada"
+                else -quantity
+            )
+
+
+            with db_conn() as conn:
+
+                # En PostgreSQL bloqueamos la fila
+                # mientras actualizamos inventario.
+                product_sql = """
+                    SELECT *
+                    FROM products
+                    WHERE id=?
+                """
+
+                if (
+                    db.engine.dialect.name
+                    == "postgresql"
+                ):
+
+                    product_sql += " FOR UPDATE"
+
+
+                product = conn.execute(
+                    product_sql,
+                    (
+                        product_id,
+                    )
+                ).fetchone()
+
+
+                if not product:
+
+                    raise ValueError(
+                        "Producto no encontrado."
+                    )
+
+
+                current_stock = Decimal(
+                    str(
+                        product["stock"]
+                        or 0
+                    )
+                )
+
+
+                new_stock = (
+                    current_stock
+                    + signed
+                )
+
+
+                if new_stock < Decimal("0"):
+
+                    raise ValueError(
+                        "La salida supera el "
+                        "inventario disponible."
+                    )
+
+
+                # Actualizar inventario
+                conn.execute(
+                    """
+                    UPDATE products
+
+                    SET
+                        stock=?,
+                        updated_at=CURRENT_TIMESTAMP
+
+                    WHERE id=?
+                    """,
+                    (
+                        float(new_stock),
+                        product_id
+                    )
+                )
+
+
+                # Registrar movimiento
+                conn.execute(
+                    """
+                    INSERT INTO movements(
+                        product_id,
+                        movement_type,
+                        quantity,
+                        reference,
+                        notes,
+                        created_at,
+                        user_id
+                    )
+
+                    VALUES(
+                        ?,?,?,?,?,?,?
+                    )
+                    """,
+                    (
+                        product_id,
+                        movement_type,
+                        float(quantity),
+                        request.form.get(
+                            "reference",
+                            ""
+                        ).strip(),
+                        request.form.get(
+                            "notes",
+                            ""
+                        ).strip(),
+                        datetime.now().isoformat(
+                            timespec="seconds"
+                        ),
+                        g.user["id"]
+                    )
+                )
+
+
+            flash(
+                f"Movimiento registrado correctamente. "
+                f"Nuevo inventario: {new_stock:g}",
+                "success"
+            )
+
+            return redirect(
+                url_for("movements")
+            )
+
+
+        except (
+            ValueError,
+            KeyError,
+            TypeError
+        ) as exc:
+
+            flash(
+                str(exc),
+                "danger"
+            )
+
 
     with db_conn() as conn:
-        product_rows = conn.execute("SELECT id, code, description, stock FROM products WHERE active=1 ORDER BY description").fetchall()
-        rows = conn.execute(
-            """SELECT m.*, p.code, p.description, u.full_name AS user_name FROM movements m
-            JOIN products p ON p.id=m.product_id
-            LEFT JOIN users u ON u.id=m.user_id ORDER BY m.id DESC LIMIT 100"""
-        ).fetchall()
-    return render_template("movements.html", products=product_rows, movements=rows)
 
+        product_rows = conn.execute(
+            """
+            SELECT
+                id,
+                code,
+                description,
+                stock
+
+            FROM products
+
+            WHERE active=1
+
+            ORDER BY description
+            """
+        ).fetchall()
+
+
+        rows = conn.execute(
+            """
+            SELECT
+                m.*,
+                p.code,
+                p.description,
+                u.full_name AS user_name
+
+            FROM movements m
+
+            JOIN products p
+                ON p.id=m.product_id
+
+            LEFT JOIN users u
+                ON u.id=m.user_id
+
+            ORDER BY
+                m.id DESC
+
+            LIMIT 100
+            """
+        ).fetchall()
+
+
+    return render_template(
+        "movements.html",
+        products=product_rows,
+        movements=rows
+    )
 
 
 @app.route("/vendedores")
