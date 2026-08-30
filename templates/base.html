@@ -3,7 +3,8 @@
 <a href="{{ url_for('dashboard') }}">Inicio</a><a href="{{ url_for('products') }}">Productos</a>
 {% if g.user.role == 'administrador' %}<a href="{{ url_for('movements') }}">Movimientos</a>{% endif %}
 <a href="{{ url_for('services') }}">Servicios</a><a href="{{ url_for('salespeople') }}">Vendedores</a>
-<a href="{{ url_for('invoice_new') }}">Nueva remisión</a><a href="{{ url_for('invoices') }}">Remisiones</a>
+<a href="{{ url_for('invoice_new') }}">Nueva remisión</a><a href="{{ url_for('invoices') }}">Remisiones</a><a href="{{ url_for('accounts_receivable') }}">Cuentas por cobrar</a>
+{% if g.user.role == 'administrador' %}<a href="{{ url_for('finances') }}">Finanzas</a>{% endif %}
 {% if g.user.role == 'administrador' %}<a href="{{ url_for('users') }}">Usuarios</a><a href="{{ url_for('settings_view') }}">Configuración</a>{% endif %}
 </nav></aside>
 <main class="main"><div class="topbar"><h1>{{ heading or 'Control de inventario' }}</h1><div class="actions"><span>{{ g.user.full_name }} · {{ g.user.role|capitalize }}</span><a class="btn btn-success" href="{{ url_for('invoice_new') }}">+ Nueva remisión</a><a class="btn" href="{{ url_for('logout') }}">Salir</a></div></div>

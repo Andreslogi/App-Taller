@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% set heading = 'Historial de cuenta por cobrar' %}
+{% block content %}
+<div class="card">
+    <h3>{{ account.number }} · {{ account.customer_name }}</h3>
+    <div class="grid grid-3">
+        <div><div class="muted">Fecha de remisión</div><strong>{{ account.issued_at[:10] }}</strong></div>
+        <div><div class="muted">Total original</div><strong>{{ account.original_amount|money }}</strong></div>
+        <div><div class="muted">Total abonado</div><strong>{{ total_paid|money }}</strong></div>
+        <div><div class="muted">Saldo pendiente</div><strong>{{ balance|money }}</strong></div>
+        <div><div class="muted">Fecha acordada</div><strong>{{ account.due_date or 'Sin fecha' }}</strong></div>
+        <div><div class="muted">Placa</div><strong>{{ account.vehicle_plate or '-' }}</strong></div>
+    </div>
+    <div class="actions" style="margin-top:14px;">
+        <a class="btn" href="{{ url_for('accounts_receivable') }}">Volver</a>
+        <a class="btn btn-light" href="{{ url_for('invoice_view', invoice_id=account.invoice_id) }}">Ver remisión</a>
+    </div>
+</div>
+<div class="card table-wrap">
+    <h3>Pagos y abonos</h3>
+    <table class="table">
+        <thead><tr><th>Fecha</th><th>Valor</th><th>Forma de pago</th><th>Observación</th><th>Registrado por</th></tr></thead>
+        <tbody>
+        {% for payment in payments %}
+            <tr><td>{{ payment.payment_date }}</td><td>{{ payment.amount|money }}</td><td>{{ payment.payment_method }}</td><td>{{ payment.notes or '-' }}</td><td>{{ payment.user_name or '-' }}</td></tr>
+        {% else %}
+            <tr><td colspan="5">Todavía no se han registrado pagos.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

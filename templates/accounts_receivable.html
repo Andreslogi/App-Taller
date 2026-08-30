@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% set heading = 'Cuentas por cobrar' %}
+
+{% block content %}
+<div class="grid grid-3">
+    <div class="card stat"><div class="label">Cartera pendiente</div><div class="value">{{ total_pending|money }}</div></div>
+    <div class="card stat"><div class="label">Cartera vencida</div><div class="value">{{ total_overdue|money }}</div></div>
+    <div class="card stat"><div class="label">Sin fecha acordada</div><div class="value">{{ total_without_date|money }}</div></div>
+</div>
+
+<div class="card">
+    <form method="get" class="form-grid">
+        <div class="form-group">
+            <label>Buscar</label>
+            <input name="q" value="{{ q }}" placeholder="Cliente, remisión, documento, teléfono o placa">
+        </div>
+        <div class="form-group">
+            <label>Estado</label>
+            <select name="status">
+                <option value="ABIERTAS" {% if status_filter == 'ABIERTAS' %}selected{% endif %}>Abiertas</option>
+                <option value="PENDIENTE" {% if status_filter == 'PENDIENTE' %}selected{% endif %}>Pendientes</option>
+                <option value="PAGO PARCIAL" {% if status_filter == 'PAGO PARCIAL' %}selected{% endif %}>Pago parcial</option>
+                <option value="VENCIDA" {% if status_filter == 'VENCIDA' %}selected{% endif %}>Vencidas</option>
+                <option value="PAGADA" {% if status_filter == 'PAGADA' %}selected{% endif %}>Pagadas</option>
+                <option value="TODAS" {% if status_filter == 'TODAS' %}selected{% endif %}>Todas</option>
+            </select>
+        </div>
+        <div class="form-group" style="align-self:end;"><button class="btn btn-primary" type="submit">Filtrar</button></div>
+    </form>
+</div>
+
+<div class="card table-wrap">
+    <table class="table">
+        <thead><tr>
+            <th>Remisión</th><th>Fecha</th><th>Cliente</th><th>Teléfono</th><th>Placa</th>
+            <th>Total</th><th>Abonado</th><th>Saldo</th><th>Fecha acordada</th><th>Estado</th><th>Acciones</th>
+        </tr></thead>
+        <tbody>
+        {% for account in accounts %}
+        <tr>
+            <td><a href="{{ url_for('invoice_view', invoice_id=account.invoice_id) }}">{{ account.number }}</a></td>
+            <td>{{ account.issued_at[:10] }}</td>
+            <td>{{ account.customer_name }}</td>
+            <td>{{ account.customer_phone or '-' }}</td>
+            <td>{{ account.vehicle_plate or '-' }}</td>
+            <td>{{ account.original_amount|money }}</td>
+            <td>{{ account.paid_amount|money }}</td>
+            <td><strong>{{ account.balance|money }}</strong></td>
+            <td>{{ account.due_date or 'Sin fecha' }}</td>
+            <td><strong>{{ account.display_status }}</strong></td>
+            <td style="min-width:250px;">
+                <a class="btn btn-sm btn-light" href="{{ url_for('accounts_receivable_history', account_id=account.id) }}">Historial</a>
+                {% if account.balance > 0 %}
+                <details style="margin-top:8px;">
+                    <summary class="btn btn-sm">Registrar abono</summary>
+                    <form method="post" action="{{ url_for('accounts_receivable_payment', account_id=account.id) }}" style="margin-top:10px;">
+                        <input type="number" name="amount" min="0.01" step="0.01" max="{{ account.balance }}" placeholder="Valor del abono" required>
+                        <input type="date" name="payment_date">
+                        <select name="payment_method"><option>Efectivo</option><option>Transferencia</option><option>Tarjeta</option></select>
+                        <input name="notes" placeholder="Observación (opcional)">
+                        <button class="btn btn-sm btn-primary" type="submit">Guardar abono</button>
+                    </form>
+                </details>
+                <details style="margin-top:8px;">
+                    <summary class="btn btn-sm btn-success">Marcar como pagada</summary>
+                    <form method="post" action="{{ url_for('accounts_receivable_pay_full', account_id=account.id) }}" style="margin-top:10px;" onsubmit="return confirm('¿Confirmas que el cliente pagó todo el saldo pendiente?');">
+                        <input type="date" name="payment_date">
+                        <select name="payment_method"><option>Efectivo</option><option>Transferencia</option><option>Tarjeta</option></select>
+                        <input name="notes" placeholder="Observación (opcional)">
+                        <button class="btn btn-sm btn-success" type="submit">Confirmar pago total</button>
+                    </form>
+                </details>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11">No hay cuentas que coincidan con el filtro.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

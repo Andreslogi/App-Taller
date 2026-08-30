@@ -983,8 +983,28 @@ def invoice_new():
             if not salesperson_id_raw:
                 raise ValueError("Selecciona quién está realizando la venta.")
             salesperson_id = int(salesperson_id_raw)
-            payment_method = request.form.get("payment_method", "Efectivo")
+            payment_method = request.form.get("payment_method", "Efectivo").strip()
             notes = request.form.get("notes", "").strip()
+
+            credit_due_date_raw = request.form.get("credit_due_date", "").strip()
+            credit_initial_payment = parse_decimal(
+                request.form.get("credit_initial_payment", "0")
+            )
+            credit_initial_payment_method = request.form.get(
+                "credit_initial_payment_method", "Efectivo"
+            ).strip() or "Efectivo"
+
+            if credit_initial_payment < 0:
+                raise ValueError("El abono inicial no puede ser negativo.")
+
+            credit_due_date = None
+            if payment_method == "Crédito" and credit_due_date_raw:
+                try:
+                    credit_due_date = datetime.strptime(
+                        credit_due_date_raw, "%Y-%m-%d"
+                    ).date()
+                except ValueError as exc:
+                    raise ValueError("La fecha acordada de pago no es válida.") from exc
 
             product_ids = request.form.getlist("product_id[]")
             quantities = request.form.getlist("quantity[]")
@@ -1055,8 +1075,18 @@ def invoice_new():
                 tax_rate = Decimal(str(settings["tax_rate"] or 0))
                 tax = (subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
                 total = subtotal + tax
-                issued_at = datetime.now().isoformat(timespec="seconds")
+                issued_date = request.form.get(
+                    "issued_date",
+                    ""
+                ).strip()
 
+                if issued_date:
+                    issued_at = f"{issued_date}T12:00:00"
+                else:
+                    issued_at = datetime.now().isoformat(
+                        timespec="seconds"
+                    )
+                    
                 customer_id = None
                 if customer_name.lower() != "consumidor final" or customer_document:
                     existing = None
@@ -1103,6 +1133,43 @@ def invoice_new():
                          float(worker_pct), float(business_pct), float(worker_amount), float(business_amount)),
                     )
 
+                # Si la remisión es a crédito, crear automáticamente la cuenta por cobrar.
+                if payment_method == "Crédito":
+                    if credit_initial_payment > total:
+                        raise ValueError(
+                            "El abono inicial no puede ser mayor al total de la remisión."
+                        )
+
+                    initial_status = "PAGO PARCIAL" if credit_initial_payment > 0 else "PENDIENTE"
+                    receivable_cur = conn.execute(
+                        """INSERT INTO accounts_receivable(
+                            invoice_id,original_amount,due_date,status,created_at
+                        ) VALUES(?,?,?,?,?)""",
+                        (
+                            invoice_id,
+                            float(total),
+                            credit_due_date,
+                            initial_status,
+                            datetime.now().isoformat(timespec="seconds"),
+                        ),
+                    )
+                    receivable_id = receivable_cur.lastrowid
+
+                    if credit_initial_payment > 0:
+                        conn.execute(
+                            """INSERT INTO accounts_receivable_payments(
+                                receivable_id,amount,payment_date,payment_method,notes,user_id
+                            ) VALUES(?,?,?,?,?,?)""",
+                            (
+                                receivable_id,
+                                float(credit_initial_payment),
+                                datetime.now().date(),
+                                credit_initial_payment_method,
+                                "Abono inicial registrado al crear la remisión",
+                                g.user["id"],
+                            ),
+                        )
+
                 conn.execute("UPDATE settings SET next_invoice=next_invoice+1 WHERE id=1")
 
             generate_invoice_pdf(invoice_id)
@@ -1131,6 +1198,441 @@ def invoice_new():
         form_data=form_data
     )
 
+@app.route("/finanzas")
+@role_required("administrador")
+def finances():
+    """Resumen de ingresos registrados por productos y participación del negocio en servicios."""
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+
+    # Validar fechas para evitar filtros inválidos y conservar consultas portables SQLite/PostgreSQL.
+    for value, label in ((date_from, "Desde"), (date_to, "Hasta")):
+        if value:
+            try:
+                datetime.strptime(value, "%Y-%m-%d")
+            except ValueError:
+                flash(f"La fecha '{label}' no es válida.", "danger")
+                return redirect(url_for("finances"))
+
+    if date_from and date_to and date_from > date_to:
+        flash("La fecha Desde no puede ser posterior a la fecha Hasta.", "danger")
+        return redirect(url_for("finances"))
+
+    filters = []
+    params = []
+    if date_from:
+        filters.append("DATE(i.issued_at) >= ?")
+        params.append(date_from)
+    if date_to:
+        filters.append("DATE(i.issued_at) <= ?")
+        params.append(date_to)
+
+    where_clause = ""
+    if filters:
+        where_clause = " WHERE " + " AND ".join(filters)
+
+    with db_conn() as conn:
+        product_summary = conn.execute(
+            f"""
+            SELECT
+                COALESCE(SUM(ii.line_total), 0) AS product_sales,
+                COALESCE(SUM(ii.quantity), 0) AS product_units,
+                COUNT(ii.id) AS product_lines
+            FROM invoice_items ii
+            JOIN invoices i ON i.id = ii.invoice_id
+            {where_clause}
+            """,
+            tuple(params),
+        ).fetchone()
+
+        service_summary = conn.execute(
+            f"""
+            SELECT
+                COALESCE(SUM(isi.line_total), 0) AS service_total,
+                COALESCE(SUM(isi.worker_amount), 0) AS worker_total,
+                COALESCE(SUM(isi.business_amount), 0) AS business_total,
+                COUNT(isi.id) AS service_lines
+            FROM invoice_service_items isi
+            JOIN invoices i ON i.id = isi.invoice_id
+            {where_clause}
+            """,
+            tuple(params),
+        ).fetchone()
+
+        invoice_summary = conn.execute(
+            f"""
+            SELECT COUNT(*) AS invoice_count
+            FROM invoices i
+            {where_clause}
+            """,
+            tuple(params),
+        ).fetchone()
+
+        daily = conn.execute(
+            f"""
+            SELECT
+                activity_date,
+                COALESCE(SUM(product_sales), 0) AS product_sales,
+                COALESCE(SUM(service_total), 0) AS service_total,
+                COALESCE(SUM(service_business), 0) AS service_business
+            FROM (
+                SELECT
+                    DATE(i.issued_at) AS activity_date,
+                    COALESCE(SUM(ii.line_total), 0) AS product_sales,
+                    0 AS service_total,
+                    0 AS service_business
+                FROM invoice_items ii
+                JOIN invoices i ON i.id = ii.invoice_id
+                {where_clause}
+                GROUP BY DATE(i.issued_at)
+
+                UNION ALL
+
+                SELECT
+                    DATE(i.issued_at) AS activity_date,
+                    0 AS product_sales,
+                    COALESCE(SUM(isi.line_total), 0) AS service_total,
+                    COALESCE(SUM(isi.business_amount), 0) AS service_business
+                FROM invoice_service_items isi
+                JOIN invoices i ON i.id = isi.invoice_id
+                {where_clause}
+                GROUP BY DATE(i.issued_at)
+            ) finance_daily
+            GROUP BY activity_date
+            ORDER BY activity_date DESC
+            """,
+            tuple(params) + tuple(params),
+        ).fetchall()
+
+        product_detail = conn.execute(
+            f"""
+            SELECT
+                ii.code,
+                ii.description,
+                COALESCE(SUM(ii.quantity), 0) AS quantity_total,
+                COALESCE(SUM(ii.line_total), 0) AS sales_total
+            FROM invoice_items ii
+            JOIN invoices i ON i.id = ii.invoice_id
+            {where_clause}
+            GROUP BY ii.code, ii.description
+            ORDER BY sales_total DESC, ii.description ASC
+            """,
+            tuple(params),
+        ).fetchall()
+
+    product_sales = Decimal(str(product_summary["product_sales"] or 0))
+    service_total = Decimal(str(service_summary["service_total"] or 0))
+    service_worker = Decimal(str(service_summary["worker_total"] or 0))
+    service_business = Decimal(str(service_summary["business_total"] or 0))
+    business_income = product_sales + service_business
+
+    daily_rows = []
+    for row in daily:
+        item = dict(row)
+        item["business_income"] = (
+            Decimal(str(item.get("product_sales") or 0))
+            + Decimal(str(item.get("service_business") or 0))
+        )
+        daily_rows.append(item)
+
+    now = datetime.now().date()
+    yesterday = now.fromordinal(now.toordinal() - 1)
+    week_start = now.fromordinal(now.toordinal() - now.weekday())
+    month_start = now.replace(day=1)
+
+    return render_template(
+        "finances.html",
+        date_from=date_from,
+        date_to=date_to,
+        product_sales=product_sales,
+        service_total=service_total,
+        service_worker=service_worker,
+        service_business=service_business,
+        business_income=business_income,
+        invoice_count=int(invoice_summary["invoice_count"] or 0),
+        product_units=Decimal(str(product_summary["product_units"] or 0)),
+        daily=daily_rows,
+        product_detail=product_detail,
+        today_iso=now.isoformat(),
+        yesterday_iso=yesterday.isoformat(),
+        week_start_iso=week_start.isoformat(),
+        month_start_iso=month_start.isoformat(),
+    )
+
+
+def _receivable_display_status(row: dict[str, Any], today=None) -> str:
+    """Calcula el estado visible de una cuenta por cobrar."""
+    today = today or datetime.now().date()
+    original = Decimal(str(row.get("original_amount") or 0))
+    paid = Decimal(str(row.get("paid_amount") or 0))
+    balance = original - paid
+
+    if balance <= 0:
+        return "PAGADA"
+
+    due_raw = row.get("due_date")
+    if due_raw:
+        if hasattr(due_raw, "date") and not isinstance(due_raw, str):
+            try:
+                due = due_raw.date()
+            except Exception:
+                due = due_raw
+        elif isinstance(due_raw, str):
+            try:
+                due = datetime.strptime(due_raw[:10], "%Y-%m-%d").date()
+            except ValueError:
+                due = None
+        else:
+            due = due_raw
+        if due and due < today:
+            return "VENCIDA"
+
+    if paid > 0:
+        return "PAGO PARCIAL"
+    return "PENDIENTE"
+
+
+@app.route("/cuentas-por-cobrar")
+@login_required
+def accounts_receivable():
+    status_filter = request.args.get("status", "ABIERTAS").strip().upper()
+    q = request.args.get("q", "").strip()
+
+    with db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                ar.id, ar.invoice_id, ar.original_amount, ar.due_date,
+                ar.status, ar.created_at, ar.closed_at,
+                i.number, i.issued_at, i.customer_name, i.customer_document,
+                i.customer_phone, i.vehicle_plate,
+                COALESCE((
+                    SELECT SUM(p.amount)
+                    FROM accounts_receivable_payments p
+                    WHERE p.receivable_id = ar.id
+                ), 0) AS paid_amount
+            FROM accounts_receivable ar
+            JOIN invoices i ON i.id = ar.invoice_id
+            ORDER BY i.issued_at ASC, ar.id ASC
+            """
+        ).fetchall()
+
+    accounts = []
+    total_pending = Decimal("0")
+    total_overdue = Decimal("0")
+    total_without_date = Decimal("0")
+
+    q_lower = q.lower()
+    for row in rows:
+        account = dict(row)
+        original = Decimal(str(account.get("original_amount") or 0))
+        paid = Decimal(str(account.get("paid_amount") or 0))
+        balance = max(Decimal("0"), original - paid)
+        display_status = _receivable_display_status(account)
+
+        account["paid_amount"] = paid
+        account["balance"] = balance
+        account["display_status"] = display_status
+
+        if balance > 0:
+            total_pending += balance
+            if display_status == "VENCIDA":
+                total_overdue += balance
+            if not account.get("due_date"):
+                total_without_date += balance
+
+        if q_lower:
+            haystack = " ".join(
+                str(account.get(key) or "")
+                for key in ("number", "customer_name", "customer_document", "customer_phone", "vehicle_plate")
+            ).lower()
+            if q_lower not in haystack:
+                continue
+
+        if status_filter == "ABIERTAS" and display_status == "PAGADA":
+            continue
+        if status_filter not in ("", "TODAS", "ABIERTAS") and display_status != status_filter:
+            continue
+
+        accounts.append(account)
+
+    return render_template(
+        "accounts_receivable.html",
+        accounts=accounts,
+        status_filter=status_filter,
+        q=q,
+        total_pending=total_pending,
+        total_overdue=total_overdue,
+        total_without_date=total_without_date,
+    )
+
+
+@app.route("/cuentas-por-cobrar/<int:account_id>/pago", methods=["POST"])
+@login_required
+def accounts_receivable_payment(account_id: int):
+    try:
+        amount = parse_decimal(request.form.get("amount", "0"))
+        payment_method = request.form.get("payment_method", "Efectivo").strip() or "Efectivo"
+        payment_date_raw = request.form.get("payment_date", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if amount <= 0:
+            raise ValueError("El valor del pago debe ser mayor a cero.")
+
+        if payment_date_raw:
+            try:
+                payment_date = datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
+            except ValueError as exc:
+                raise ValueError("La fecha del pago no es válida.") from exc
+        else:
+            payment_date = datetime.now().date()
+
+        with db_conn() as conn:
+            account = conn.execute(
+                """
+                SELECT ar.*,
+                       COALESCE((
+                           SELECT SUM(p.amount)
+                           FROM accounts_receivable_payments p
+                           WHERE p.receivable_id = ar.id
+                       ), 0) AS paid_amount
+                FROM accounts_receivable ar
+                WHERE ar.id=?
+                """,
+                (account_id,),
+            ).fetchone()
+
+            if not account:
+                raise ValueError("La cuenta por cobrar no existe.")
+
+            original = Decimal(str(account["original_amount"] or 0))
+            already_paid = Decimal(str(account["paid_amount"] or 0))
+            balance = original - already_paid
+
+            if balance <= 0:
+                raise ValueError("Esta cuenta ya se encuentra pagada.")
+            if amount > balance:
+                raise ValueError(f"El pago supera el saldo pendiente de {money(balance)}.")
+
+            conn.execute(
+                """INSERT INTO accounts_receivable_payments(
+                    receivable_id,amount,payment_date,payment_method,notes,user_id
+                ) VALUES(?,?,?,?,?,?)""",
+                (account_id, float(amount), payment_date, payment_method, notes, g.user["id"]),
+            )
+
+            new_balance = balance - amount
+            new_status = "PAGADA" if new_balance <= 0 else "PAGO PARCIAL"
+            closed_at = datetime.now().isoformat(timespec="seconds") if new_balance <= 0 else None
+            conn.execute(
+                "UPDATE accounts_receivable SET status=?,closed_at=? WHERE id=?",
+                (new_status, closed_at, account_id),
+            )
+
+        flash("Pago registrado correctamente.", "success")
+    except ValueError as exc:
+        flash(str(exc), "danger")
+
+    return redirect(url_for("accounts_receivable"))
+
+
+@app.route("/cuentas-por-cobrar/<int:account_id>/pagar-total", methods=["POST"])
+@login_required
+def accounts_receivable_pay_full(account_id: int):
+    try:
+        payment_method = request.form.get("payment_method", "Efectivo").strip() or "Efectivo"
+        payment_date_raw = request.form.get("payment_date", "").strip()
+        notes = request.form.get("notes", "").strip() or "Pago total de la cuenta"
+
+        if payment_date_raw:
+            try:
+                payment_date = datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
+            except ValueError as exc:
+                raise ValueError("La fecha del pago no es válida.") from exc
+        else:
+            payment_date = datetime.now().date()
+
+        with db_conn() as conn:
+            account = conn.execute(
+                """
+                SELECT ar.*,
+                       COALESCE((
+                           SELECT SUM(p.amount)
+                           FROM accounts_receivable_payments p
+                           WHERE p.receivable_id = ar.id
+                       ), 0) AS paid_amount
+                FROM accounts_receivable ar
+                WHERE ar.id=?
+                """,
+                (account_id,),
+            ).fetchone()
+
+            if not account:
+                raise ValueError("La cuenta por cobrar no existe.")
+
+            original = Decimal(str(account["original_amount"] or 0))
+            paid = Decimal(str(account["paid_amount"] or 0))
+            balance = original - paid
+
+            if balance > 0:
+                conn.execute(
+                    """INSERT INTO accounts_receivable_payments(
+                        receivable_id,amount,payment_date,payment_method,notes,user_id
+                    ) VALUES(?,?,?,?,?,?)""",
+                    (account_id, float(balance), payment_date, payment_method, notes, g.user["id"]),
+                )
+
+            conn.execute(
+                "UPDATE accounts_receivable SET status='PAGADA',closed_at=? WHERE id=?",
+                (datetime.now().isoformat(timespec="seconds"), account_id),
+            )
+
+        flash("Cuenta marcada como pagada correctamente.", "success")
+    except ValueError as exc:
+        flash(str(exc), "danger")
+
+    return redirect(url_for("accounts_receivable"))
+
+
+@app.route("/cuentas-por-cobrar/<int:account_id>/historial")
+@login_required
+def accounts_receivable_history(account_id: int):
+    with db_conn() as conn:
+        account = conn.execute(
+            """
+            SELECT ar.*, i.number, i.issued_at, i.customer_name, i.customer_phone, i.vehicle_plate
+            FROM accounts_receivable ar
+            JOIN invoices i ON i.id=ar.invoice_id
+            WHERE ar.id=?
+            """,
+            (account_id,),
+        ).fetchone()
+        payments = conn.execute(
+            """
+            SELECT p.*, u.full_name AS user_name
+            FROM accounts_receivable_payments p
+            LEFT JOIN users u ON u.id=p.user_id
+            WHERE p.receivable_id=?
+            ORDER BY p.payment_date DESC, p.id DESC
+            """,
+            (account_id,),
+        ).fetchall()
+
+    if not account:
+        flash("Cuenta por cobrar no encontrada.", "danger")
+        return redirect(url_for("accounts_receivable"))
+
+    total_paid = sum((Decimal(str(p["amount"] or 0)) for p in payments), Decimal("0"))
+    balance = max(Decimal("0"), Decimal(str(account["original_amount"] or 0)) - total_paid)
+    return render_template(
+        "accounts_receivable_history.html",
+        account=account,
+        payments=payments,
+        total_paid=total_paid,
+        balance=balance,
+    )
+
+
 @app.route("/facturas/<int:invoice_id>")
 @login_required
 def invoice_view(invoice_id: int):
@@ -1139,11 +1641,33 @@ def invoice_view(invoice_id: int):
             LEFT JOIN users u ON u.id=i.user_id WHERE i.id=?""", (invoice_id,)).fetchone()
         items = conn.execute("SELECT * FROM invoice_items WHERE invoice_id=?", (invoice_id,)).fetchall()
         service_items = conn.execute("SELECT * FROM invoice_service_items WHERE invoice_id=?", (invoice_id,)).fetchall()
+        receivable = conn.execute(
+            """SELECT ar.*,
+                      COALESCE((SELECT SUM(p.amount) FROM accounts_receivable_payments p WHERE p.receivable_id=ar.id),0) AS paid_amount
+               FROM accounts_receivable ar WHERE ar.invoice_id=?""",
+            (invoice_id,),
+        ).fetchone()
+        payments = []
+        if receivable:
+            payments = conn.execute(
+                "SELECT * FROM accounts_receivable_payments WHERE receivable_id=? ORDER BY payment_date DESC,id DESC",
+                (receivable["id"],),
+            ).fetchall()
         settings = get_settings(conn)
     if not invoice:
         flash("Remisión no encontrada.", "danger")
         return redirect(url_for("invoices"))
-    return render_template("invoice_view.html", invoice=invoice, items=items, service_items=service_items, settings=settings)
+    if receivable:
+        receivable = dict(receivable)
+        receivable["balance"] = max(
+            Decimal("0"),
+            Decimal(str(receivable.get("original_amount") or 0)) - Decimal(str(receivable.get("paid_amount") or 0)),
+        )
+        receivable["display_status"] = _receivable_display_status(receivable)
+    return render_template(
+        "invoice_view.html", invoice=invoice, items=items, service_items=service_items,
+        settings=settings, receivable=receivable, payments=payments
+    )
 
 
 @app.route("/facturas/<int:invoice_id>/pdf")
@@ -1264,7 +1788,8 @@ def backup():
     path = BACKUP_DIR / f"inventario_respaldo_{stamp}.json"
     table_names = [
         "users", "settings", "products", "customers", "salespeople", "services",
-        "invoices", "invoice_items", "invoice_service_items", "movements"
+        "invoices", "invoice_items", "invoice_service_items", "movements",
+        "accounts_receivable", "accounts_receivable_payments"
     ]
     payload = {"created_at": datetime.now().isoformat(), "database": db.engine.dialect.name, "tables": {}}
     with db_conn() as conn:

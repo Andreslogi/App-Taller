@@ -165,6 +165,29 @@ class InvoiceServiceItem(db.Model):
     business_amount = db.Column(db.Numeric(16, 2), nullable=False)
 
 
+class AccountReceivable(db.Model):
+    __tablename__ = "accounts_receivable"
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, unique=True)
+    original_amount = db.Column(db.Numeric(16, 2), nullable=False, default=0)
+    due_date = db.Column(db.Date, nullable=True)
+    status = db.Column(db.String(30), nullable=False, default="PENDIENTE", server_default=text("'PENDIENTE'"))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    closed_at = db.Column(db.DateTime, nullable=True)
+
+
+class AccountReceivablePayment(db.Model):
+    __tablename__ = "accounts_receivable_payments"
+    id = db.Column(db.Integer, primary_key=True)
+    receivable_id = db.Column(db.Integer, db.ForeignKey("accounts_receivable.id", ondelete="CASCADE"), nullable=False)
+    amount = db.Column(db.Numeric(16, 2), nullable=False)
+    payment_date = db.Column(db.Date, nullable=False)
+    payment_method = db.Column(db.String(80), nullable=False, default="Efectivo")
+    notes = db.Column(db.Text, default="")
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+
+
 class Movement(db.Model):
     __tablename__ = "movements"
     id = db.Column(db.Integer, primary_key=True)
@@ -253,7 +276,8 @@ class CompatConnection:
         lastrowid = None
         if insert_match and insert_match.group(1) in {
             "users", "products", "customers", "salespeople", "invoices", "invoice_items",
-            "services", "invoice_service_items", "movements"
+            "services", "invoice_service_items", "movements",
+            "accounts_receivable", "accounts_receivable_payments"
         } and " returning " not in lower and self.dialect == "postgresql":
             named_sql += " RETURNING id"
             result = self.connection.execute(text(named_sql), bind)
@@ -284,5 +308,6 @@ def db_conn():
 __all__ = [
     "db", "db_conn", "IntegrityError", "BASE_DIR", "LOCAL_DB_PATH", "database_url",
     "User", "Setting", "Product", "Customer", "Salesperson", "Invoice", "InvoiceItem",
-    "Service", "InvoiceServiceItem", "Movement",
+    "Service", "InvoiceServiceItem", "Movement", "AccountReceivable",
+    "AccountReceivablePayment",
 ]

@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% set heading='Finanzas' %}
+
+{% block content %}
+<div class="card">
+    <form method="get">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Desde</label>
+                <input type="date" name="date_from" value="{{ date_from }}">
+            </div>
+            <div class="form-group">
+                <label>Hasta</label>
+                <input type="date" name="date_to" value="{{ date_to }}">
+            </div>
+        </div>
+        <div class="actions" style="margin-top:14px">
+            <button class="btn btn-primary" type="submit">Filtrar</button>
+            <a class="btn btn-light" href="{{ url_for('finances') }}">Todo</a>
+            <a class="btn btn-light" href="{{ url_for('finances', date_from=today_iso, date_to=today_iso) }}">Hoy</a>
+            <a class="btn btn-light" href="{{ url_for('finances', date_from=yesterday_iso, date_to=yesterday_iso) }}">Ayer</a>
+            <a class="btn btn-light" href="{{ url_for('finances', date_from=week_start_iso, date_to=today_iso) }}">Esta semana</a>
+            <a class="btn btn-light" href="{{ url_for('finances', date_from=month_start_iso, date_to=today_iso) }}">Este mes</a>
+        </div>
+    </form>
+</div>
+
+<div class="grid grid-4">
+    <div class="card stat">
+        <div class="label">Ventas de productos</div>
+        <div class="value">{{ product_sales|money }}</div>
+        <div class="muted">Total registrado en repuestos/productos.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Servicios realizados</div>
+        <div class="value">{{ service_total|money }}</div>
+        <div class="muted">Valor total cobrado por servicios.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">30% del negocio en servicios</div>
+        <div class="value">{{ service_business|money }}</div>
+        <div class="muted">Participación del negocio registrada en cada servicio.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Ingreso atribuido al negocio</div>
+        <div class="value">{{ business_income|money }}</div>
+        <div class="muted">Productos + participación del negocio en servicios.</div>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <div class="card stat">
+        <div class="label">70% trabajadores por servicios</div>
+        <div class="value">{{ service_worker|money }}</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Remisiones en el periodo</div>
+        <div class="value">{{ invoice_count }}</div>
+        <div class="muted">Unidades de producto vendidas: {{ product_units }}</div>
+    </div>
+</div>
+
+<div class="alert alert-warning">
+    Esta vista muestra ingresos registrados por ventas, no utilidad neta. Para calcular rentabilidad real todavía debemos descontar el costo de los productos y los demás gastos del negocio. Las ventas a crédito se cuentan cuando se registra la remisión, aunque estén pendientes de cobro.
+</div>
+
+<div class="card table-wrap">
+    <h3>Resumen por día</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th class="right">Productos vendidos</th>
+                <th class="right">Servicios totales</th>
+                <th class="right">30% negocio servicios</th>
+                <th class="right">Ingreso negocio</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in daily %}
+            <tr>
+                <td>{{ row.activity_date }}</td>
+                <td class="right">{{ row.product_sales|money }}</td>
+                <td class="right">{{ row.service_total|money }}</td>
+                <td class="right">{{ row.service_business|money }}</td>
+                <td class="right"><strong>{{ row.business_income|money }}</strong></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5" class="muted">No hay ventas ni servicios en el periodo seleccionado.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card table-wrap">
+    <h3>Ventas por producto</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th class="right">Cantidad vendida</th>
+                <th class="right">Total vendido</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in product_detail %}
+            <tr>
+                <td>{{ row.code }}</td>
+                <td>{{ row.description }}</td>
+                <td class="right">{{ row.quantity_total }}</td>
+                <td class="right"><strong>{{ row.sales_total|money }}</strong></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="4" class="muted">No hay productos vendidos en el periodo seleccionado.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

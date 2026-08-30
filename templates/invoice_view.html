@@ -312,4 +312,20 @@
 
 </div>
 
+
+{% if receivable %}
+<div class="card">
+    <h3>Cuenta por cobrar</h3>
+    <div class="grid grid-2">
+        <div><div class="muted">Estado</div><strong>{{ receivable.display_status }}</strong></div>
+        <div><div class="muted">Saldo pendiente</div><strong>{{ receivable.balance|money }}</strong></div>
+        <div><div class="muted">Abonado</div><strong>{{ receivable.paid_amount|money }}</strong></div>
+        <div><div class="muted">Fecha acordada</div><strong>{{ receivable.due_date or 'Sin fecha' }}</strong></div>
+    </div>
+    <div class="actions" style="margin-top:14px;">
+        <a class="btn btn-light" href="{{ url_for('accounts_receivable_history', account_id=receivable.id) }}">Ver historial de pagos</a>
+        <a class="btn" href="{{ url_for('accounts_receivable') }}">Ir a cuentas por cobrar</a>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
