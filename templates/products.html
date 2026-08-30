@@ -60,6 +60,10 @@
 
                 <th>Precio venta</th>
 
+                <th>Ganancia $</th>
+
+                <th>% Ganancia</th>
+
                 <th>Estado</th>
 
                 <th></th>
@@ -117,6 +121,36 @@
 
                 <td>
                     {{ p.sale_price|money }}
+                </td>
+
+
+                <td>
+
+                    {% if p.cost and p.cost > 0 %}
+
+                        {{ (p.sale_price - p.cost)|money }}
+
+                    {% else %}
+
+                        -
+
+                    {% endif %}
+
+                </td>
+
+
+                <td>
+
+                    {% if p.cost and p.cost > 0 %}
+
+                        {{ (((p.sale_price - p.cost) / p.cost) * 100)|round(1) }}%
+
+                    {% else %}
+
+                        -
+
+                    {% endif %}
+
                 </td>
 
 
