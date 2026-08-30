@@ -1,2 +1,172 @@
-{% extends 'base.html' %}{% set heading='Productos e inventario' %}{% block content %}<div class="card"><form class="actions" method="get"><input style="max-width:430px" name="q" value="{{ q }}" placeholder="Buscar por código, descripción o categoría"><button class="btn btn-primary">Buscar</button><a class="btn btn-light" href="{{ url_for('products') }}">Limpiar</a><a class="btn btn-success" href="{{ url_for('product_new') }}">+ Producto</a></form></div>
-<div class="card table-wrap"><table class="table"><thead><tr><th>Código</th><th>Descripción</th><th>Categoría</th><th>Stock</th><th>Mínimo</th><th>Costo</th><th>Precio venta</th><th>Estado</th><th></th></tr></thead><tbody>{% for p in products %}<tr><td>{{ p.code }}</td><td>{{ p.description }}{% if p.notes %}<div class="muted">{{ p.notes }}</div>{% endif %}</td><td>{{ p.category }}</td><td>{{ p.stock|round(2) }} {{ p.unit }}</td><td>{{ p.min_stock|round(2) }}</td><td>{{ p.cost|money }}</td><td>{{ p.sale_price|money }}</td><td>{% if p.stock<=0 %}<span class="badge badge-out">AGOTADO</span>{% elif p.stock<=p.min_stock %}<span class="badge badge-low">BAJO</span>{% else %}<span class="badge badge-ok">OK</span>{% endif %}</td><td><a class="btn btn-sm btn-light" href="{{ url_for('product_edit',product_id=p.id) }}">Editar</a></td></tr>{% endfor %}</tbody></table></div>{% endblock %}
+{% extends 'base.html' %}
+
+{% set heading='Productos e inventario' %}
+
+{% block content %}
+
+<div class="card">
+
+    <form class="actions" method="get">
+
+        <input
+            style="max-width:430px"
+            name="q"
+            value="{{ q }}"
+            placeholder="Buscar por código, descripción o categoría"
+        >
+
+        <button class="btn btn-primary">
+            Buscar
+        </button>
+
+        <a
+            class="btn btn-light"
+            href="{{ url_for('products') }}"
+        >
+            Limpiar
+        </a>
+
+        <a
+            class="btn btn-success"
+            href="{{ url_for('product_new') }}"
+        >
+            + Producto
+        </a>
+
+    </form>
+
+</div>
+
+
+<div class="card table-wrap">
+
+    <table class="table">
+
+        <thead>
+
+            <tr>
+
+                <th>Código</th>
+
+                <th>Descripción</th>
+
+                <th>Categoría</th>
+
+                <th>Stock</th>
+
+                <th>Mínimo</th>
+
+                <th>Costo</th>
+
+                <th>Precio venta</th>
+
+                <th>Estado</th>
+
+                <th></th>
+
+            </tr>
+
+        </thead>
+
+
+        <tbody>
+
+        {% for p in products %}
+
+            <tr>
+
+                <td>
+                    {{ p.code }}
+                </td>
+
+
+                <td>
+
+                    {{ p.description }}
+
+                    {% if p.notes %}
+
+                        <div class="muted">
+                            {{ p.notes }}
+                        </div>
+
+                    {% endif %}
+
+                </td>
+
+
+                <td>
+                    {{ p.category }}
+                </td>
+
+
+                <td>
+                    {{ p.stock|int }} {{ p.unit }}
+                </td>
+
+
+                <td>
+                    {{ p.min_stock|int }}
+                </td>
+
+
+                <td>
+                    {{ p.cost|money }}
+                </td>
+
+
+                <td>
+                    {{ p.sale_price|money }}
+                </td>
+
+
+                <td>
+
+                    {% if p.stock <= 0 %}
+
+                        <span class="badge badge-out">
+                            AGOTADO
+                        </span>
+
+                    {% elif p.stock <= p.min_stock %}
+
+                        <span class="badge badge-low">
+                            BAJO
+                        </span>
+
+                    {% else %}
+
+                        <span class="badge badge-ok">
+                            OK
+                        </span>
+
+                    {% endif %}
+
+                </td>
+
+
+                <td>
+
+                    <a
+                        class="btn btn-sm btn-light"
+                        href="{{ url_for(
+                            'product_edit',
+                            product_id=p.id
+                        ) }}"
+                    >
+                        Editar
+                    </a>
+
+                </td>
+
+            </tr>
+
+        {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+{% endblock %}
