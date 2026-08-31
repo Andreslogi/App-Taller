@@ -20,18 +20,13 @@
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-
     width: min(720px, 78vw);
     max-height: 330px;
-
     overflow-y: auto;
-
     background: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 10px;
-
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
-
+    box-shadow: 0 12px 30px rgba(0,0,0,.18);
     z-index: 99999;
 }
 
@@ -58,9 +53,9 @@
 }
 
 .search-result-meta {
+    margin-top: 3px;
     font-size: 12px;
     color: #667085;
-    margin-top: 3px;
 }
 
 .search-empty {
@@ -73,19 +68,29 @@
     overflow: visible;
 }
 
-.product-row,
-.service-row {
-    position: relative;
-}
-
 .credit-box {
     margin-top: 16px;
     padding: 16px;
-
     border: 1px solid #d9e2ec;
     border-radius: 10px;
-
     background: #f8fafc;
+}
+
+.total-box {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.total-box-inner {
+    min-width: 320px;
+}
+
+.total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    font-size: 20px;
 }
 
 </style>
@@ -93,7 +98,6 @@
 
 <!-- ======================================================
      CATÁLOGOS OCULTOS
-     JavaScript leerá estos datos
 ======================================================= -->
 
 <div id="productCatalog" style="display:none;">
@@ -131,7 +135,9 @@
 </div>
 
 
-<!-- Datos enviados previamente si hubo error -->
+<!-- ======================================================
+     DATOS POST ANTERIORES
+======================================================= -->
 
 <textarea
     id="postedProductIds"
@@ -183,7 +189,6 @@
         <h3>
             Datos de la remisión
         </h3>
-
 
         <div class="form-grid">
 
@@ -286,7 +291,7 @@
                 <input
                     name="vehicle_plate"
                     value="{{ request.form.get('vehicle_plate', '') }}"
-                    style="text-transform: uppercase;"
+                    style="text-transform:uppercase;"
                 >
 
             </div>
@@ -382,7 +387,6 @@
             <h4 style="margin-top:0;">
                 Datos del crédito
             </h4>
-
 
             <div class="form-grid">
 
@@ -534,7 +538,6 @@
 
                 </thead>
 
-
                 <tbody id="productBody">
                 </tbody>
 
@@ -598,7 +601,6 @@
 
                 </thead>
 
-
                 <tbody id="serviceBody">
                 </tbody>
 
@@ -608,6 +610,39 @@
 
     </div>
 
+
+    <!-- ==================================================
+         SUBTOTAL
+    =================================================== -->
+
+    <div class="card">
+
+        <div class="total-box">
+
+            <div class="total-box-inner">
+
+                <div class="total-row">
+
+                    <strong>
+                        Subtotal
+                    </strong>
+
+                    <strong id="liveSubtotal">
+                        $ 0
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         ACCIONES
+    =================================================== -->
 
     <div class="card">
 
@@ -637,7 +672,7 @@
 <script>
 
 /* =========================================================
-   CARGAR CATÁLOGOS DESDE HTML
+   CATÁLOGOS
 ========================================================= */
 
 const PRODUCTS =
@@ -720,27 +755,13 @@ function formatMoney(value) {
         '$ '
         +
         Number(value || 0)
-            .toLocaleString(
-                'es-CO',
-                {
-                    maximumFractionDigits: 0
-                }
-            )
+        .toLocaleString(
+            'es-CO',
+            {
+                maximumFractionDigits: 0
+            }
+        )
     );
-
-}
-
-
-function formatQuantity(value) {
-
-    const number =
-        Number(value || 0);
-
-    return Number.isInteger(number)
-        ?
-        String(number)
-        :
-        String(number);
 
 }
 
@@ -783,7 +804,108 @@ function productLabel(product) {
 
 
 /* =========================================================
-   CERRAR LISTAS
+   SUBTOTAL
+========================================================= */
+
+function updateSubtotal() {
+
+    let subtotal =
+        0;
+
+
+    document
+        .querySelectorAll(
+            '.product-row'
+        )
+        .forEach(
+            row => {
+
+                const quantity =
+                    Number(
+                        row.querySelector(
+                            'input[name="quantity[]"]'
+                        )?.value
+                        ||
+                        0
+                    );
+
+
+                const price =
+                    Number(
+                        row.querySelector(
+                            'input[name="price[]"]'
+                        )?.value
+                        ||
+                        0
+                    );
+
+
+                subtotal +=
+                    quantity
+                    *
+                    price;
+
+            }
+        );
+
+
+    document
+        .querySelectorAll(
+            '.service-row'
+        )
+        .forEach(
+            row => {
+
+                const quantity =
+                    Number(
+                        row.querySelector(
+                            'input[name="service_quantity[]"]'
+                        )?.value
+                        ||
+                        0
+                    );
+
+
+                const price =
+                    Number(
+                        row.querySelector(
+                            'input[name="service_price[]"]'
+                        )?.value
+                        ||
+                        0
+                    );
+
+
+                subtotal +=
+                    quantity
+                    *
+                    price;
+
+            }
+        );
+
+
+    const element =
+        document.getElementById(
+            'liveSubtotal'
+        );
+
+
+    if (
+        element
+    ) {
+
+        element.textContent =
+            formatMoney(
+                subtotal
+            );
+    }
+
+}
+
+
+/* =========================================================
+   LISTAS
 ========================================================= */
 
 function closeAllLists(
@@ -823,6 +945,7 @@ function showProductResults(
         picker.querySelector(
             '.product-search'
         );
+
 
     const results =
         picker.querySelector(
@@ -912,9 +1035,7 @@ function showProductResults(
                 <div class="search-result-meta">
 
                     Stock:
-                    ${formatQuantity(
-                        product.stock
-                    )}
+                    ${product.stock}
 
                     ${escapeHtml(
                         product.unit
@@ -1011,14 +1132,14 @@ function chooseProduct(
     }
 
 
-    picker
-        .querySelector(
-            '.search-results'
-        )
-        .classList
-        .remove(
-            'open'
-        );
+    picker.querySelector(
+        '.search-results'
+    ).classList.remove(
+        'open'
+    );
+
+
+    updateSubtotal();
 
 }
 
@@ -1106,11 +1227,9 @@ function showServiceResults(
             option.innerHTML =
                 `
                 <div class="search-result-title">
-
                     ${escapeHtml(
                         service.name
                     )}
-
                 </div>
 
                 <div class="search-result-meta">
@@ -1204,20 +1323,20 @@ function chooseService(
     }
 
 
-    picker
-        .querySelector(
-            '.search-results'
-        )
-        .classList
-        .remove(
-            'open'
-        );
+    picker.querySelector(
+        '.search-results'
+    ).classList.remove(
+        'open'
+    );
+
+
+    updateSubtotal();
 
 }
 
 
 /* =========================================================
-   AGREGAR FILAS
+   FILAS
 ========================================================= */
 
 function addProductRow(
@@ -1298,7 +1417,6 @@ function addProductRow(
             <button
                 type="button"
                 class="btn btn-sm btn-light"
-                onclick="this.closest('tr').remove()"
             >
                 Quitar
             </button>
@@ -1354,6 +1472,22 @@ function addProductRow(
     );
 
 
+    row
+        .querySelector(
+            'button'
+        )
+        .addEventListener(
+            'click',
+            () => {
+
+                row.remove();
+
+                updateSubtotal();
+
+            }
+        );
+
+
     if (
         productId
     ) {
@@ -1375,6 +1509,9 @@ function addProductRow(
             );
         }
     }
+
+
+    updateSubtotal();
 
 }
 
@@ -1432,7 +1569,6 @@ function addServiceRow(
             <input
                 name="service_worker[]"
                 value="${worker}"
-                placeholder="Trabajador"
                 required
             >
 
@@ -1469,7 +1605,6 @@ function addServiceRow(
             <button
                 type="button"
                 class="btn btn-sm btn-light"
-                onclick="this.closest('tr').remove()"
             >
                 Quitar
             </button>
@@ -1525,6 +1660,22 @@ function addServiceRow(
     );
 
 
+    row
+        .querySelector(
+            'button'
+        )
+        .addEventListener(
+            'click',
+            () => {
+
+                row.remove();
+
+                updateSubtotal();
+
+            }
+        );
+
+
     if (
         serviceId
     ) {
@@ -1547,6 +1698,9 @@ function addServiceRow(
         }
     }
 
+
+    updateSubtotal();
+
 }
 
 
@@ -1558,16 +1712,12 @@ function validateInvoice(
     event
 ) {
 
-    const productRows =
-        document.querySelectorAll(
-            '.product-row'
-        );
-
-
     for (
         const row
         of
-        productRows
+        document.querySelectorAll(
+            '.product-row'
+        )
     ) {
 
         const id =
@@ -1595,16 +1745,12 @@ function validateInvoice(
     }
 
 
-    const serviceRows =
-        document.querySelectorAll(
-            '.service-row'
-        );
-
-
     for (
         const row
         of
-        serviceRows
+        document.querySelectorAll(
+            '.service-row'
+        )
     ) {
 
         const id =
@@ -1655,6 +1801,16 @@ function toggleCreditFields() {
         );
 
 
+    if (
+        !payment
+        ||
+        !fields
+    ) {
+
+        return;
+    }
+
+
     fields.style.display =
         payment.value
         ===
@@ -1680,6 +1836,8 @@ function setToday() {
 
 
     if (
+        !field
+        ||
         field.value
     ) {
 
@@ -1724,7 +1882,7 @@ function setToday() {
 
 
 /* =========================================================
-   RESTAURAR FORMULARIO
+   RESTAURAR
 ========================================================= */
 
 function readJson(
@@ -1755,7 +1913,53 @@ function readJson(
 
 
 /* =========================================================
-   INICIAR
+   EVENTOS
+========================================================= */
+
+document.addEventListener(
+    'input',
+    event => {
+
+        if (
+            event.target.matches(
+                'input[name="quantity[]"],'
+                +
+                'input[name="price[]"],'
+                +
+                'input[name="service_quantity[]"],'
+                +
+                'input[name="service_price[]"]'
+            )
+        ) {
+
+            updateSubtotal();
+
+        }
+
+    }
+);
+
+
+document.addEventListener(
+    'click',
+    event => {
+
+        if (
+            !event.target.closest(
+                '.search-picker'
+            )
+        ) {
+
+            closeAllLists();
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   INICIO
 ========================================================= */
 
 document.addEventListener(
@@ -1772,10 +1976,12 @@ document.addEventListener(
                 'postedProductIds'
             );
 
+
         const productQty =
             readJson(
                 'postedProductQuantities'
             );
+
 
         const productPrices =
             readJson(
@@ -1809,15 +2015,18 @@ document.addEventListener(
                 'postedServiceIds'
             );
 
+
         const serviceWorkers =
             readJson(
                 'postedServiceWorkers'
             );
 
+
         const serviceQty =
             readJson(
                 'postedServiceQuantities'
             );
+
 
         const servicePrices =
             readJson(
@@ -1858,23 +2067,8 @@ document.addEventListener(
                 validateInvoice
             );
 
-    }
-);
 
-
-document.addEventListener(
-    'click',
-    event => {
-
-        if (
-            !event.target.closest(
-                '.search-picker'
-            )
-        ) {
-
-            closeAllLists();
-
-        }
+        updateSubtotal();
 
     }
 );
