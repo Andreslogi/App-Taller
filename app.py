@@ -106,6 +106,53 @@ def role_required(*roles):
     return decorator
 
 
+def arturo_required(view):
+
+    @wraps(view)
+    def wrapped_view(**kwargs):
+
+        if g.user is None:
+
+            flash(
+                "Debes iniciar sesión.",
+                "warning"
+            )
+
+            return redirect(
+                url_for("login")
+            )
+
+
+        full_name = str(
+            g.user["full_name"] or ""
+        ).strip().lower()
+
+        role = str(
+            g.user["role"] or ""
+        ).strip().lower()
+
+
+        if (
+            full_name != "arturo lópez"
+            or role != "administrador"
+        ):
+
+            flash(
+                "Solo Arturo López puede editar remisiones.",
+                "danger"
+            )
+
+            return redirect(
+                url_for("dashboard")
+            )
+
+
+        return view(**kwargs)
+
+
+    return wrapped_view
+
+
 @app.before_request
 def load_logged_in_user():
     user_id = session.get("user_id")
@@ -435,229 +482,87 @@ def product_edit(product_id: int):
 @app.route("/movimientos", methods=["GET", "POST"])
 @role_required("administrador")
 def movements():
-
     if request.method == "POST":
-
         try:
-
-            product_id = int(
-                request.form["product_id"]
-            )
-
-            movement_type = request.form[
-                "movement_type"
-            ].strip()
-
-            # Trabajamos internamente con Decimal
-            # para que sea compatible con PostgreSQL.
-            quantity = parse_decimal(
-                request.form["quantity"]
-            )
+            product_id = int(request.form["product_id"])
+            movement_type = request.form["movement_type"].strip()
+            quantity = parse_decimal(request.form["quantity"])
 
             if quantity <= Decimal("0"):
+                raise ValueError("La cantidad debe ser mayor que cero.")
 
-                raise ValueError(
-                    "La cantidad debe ser mayor que cero."
-                )
+            if movement_type not in ("Entrada", "Salida"):
+                raise ValueError("Tipo de movimiento inválido.")
 
-            if movement_type not in (
-                "Entrada",
-                "Salida"
-            ):
-
-                raise ValueError(
-                    "Tipo de movimiento inválido."
-                )
-
-
-            signed = (
-                quantity
-                if movement_type == "Entrada"
-                else -quantity
-            )
-
+            signed = quantity if movement_type == "Entrada" else -quantity
 
             with db_conn() as conn:
-
-                # En PostgreSQL bloqueamos la fila
-                # mientras actualizamos inventario.
-                product_sql = """
-                    SELECT *
-                    FROM products
-                    WHERE id=?
-                """
-
-                if (
-                    db.engine.dialect.name
-                    == "postgresql"
-                ):
-
+                product_sql = "SELECT * FROM products WHERE id=?"
+                if db.engine.dialect.name == "postgresql":
                     product_sql += " FOR UPDATE"
 
-
-                product = conn.execute(
-                    product_sql,
-                    (
-                        product_id,
-                    )
-                ).fetchone()
-
-
+                product = conn.execute(product_sql, (product_id,)).fetchone()
                 if not product:
+                    raise ValueError("Producto no encontrado.")
 
-                    raise ValueError(
-                        "Producto no encontrado."
-                    )
-
-
-                current_stock = Decimal(
-                    str(
-                        product["stock"]
-                        or 0
-                    )
-                )
-
-
-                new_stock = (
-                    current_stock
-                    + signed
-                )
-
+                current_stock = Decimal(str(product["stock"] or 0))
+                new_stock = current_stock + signed
 
                 if new_stock < Decimal("0"):
+                    raise ValueError("La salida supera el inventario disponible.")
 
-                    raise ValueError(
-                        "La salida supera el "
-                        "inventario disponible."
-                    )
-
-
-                # Actualizar inventario
                 conn.execute(
-                    """
-                    UPDATE products
-
-                    SET
-                        stock=?,
-                        updated_at=CURRENT_TIMESTAMP
-
-                    WHERE id=?
-                    """,
-                    (
-                        float(new_stock),
-                        product_id
-                    )
+                    """UPDATE products
+                       SET stock=?, updated_at=CURRENT_TIMESTAMP
+                       WHERE id=?""",
+                    (float(new_stock), product_id),
                 )
-
-
-                # Registrar movimiento
                 conn.execute(
-                    """
-                    INSERT INTO movements(
-                        product_id,
-                        movement_type,
-                        quantity,
-                        reference,
-                        notes,
-                        created_at,
-                        user_id
-                    )
-
-                    VALUES(
-                        ?,?,?,?,?,?,?
-                    )
-                    """,
+                    """INSERT INTO movements(
+                           product_id,movement_type,quantity,reference,notes,created_at,user_id
+                       ) VALUES(?,?,?,?,?,?,?)""",
                     (
                         product_id,
                         movement_type,
                         float(quantity),
-                        request.form.get(
-                            "reference",
-                            ""
-                        ).strip(),
-                        request.form.get(
-                            "notes",
-                            ""
-                        ).strip(),
-                        datetime.now().isoformat(
-                            timespec="seconds"
-                        ),
-                        g.user["id"]
-                    )
+                        request.form.get("reference", "").strip(),
+                        request.form.get("notes", "").strip(),
+                        datetime.now().isoformat(timespec="seconds"),
+                        g.user["id"],
+                    ),
                 )
 
-
             flash(
-                f"Movimiento registrado correctamente. "
-                f"Nuevo inventario: {new_stock:g}",
-                "success"
+                f"Movimiento registrado correctamente. Nuevo inventario: {new_stock:g}",
+                "success",
             )
+            return redirect(url_for("movements"))
 
-            return redirect(
-                url_for("movements")
-            )
-
-
-        except (
-            ValueError,
-            KeyError,
-            TypeError
-        ) as exc:
-
-            flash(
-                str(exc),
-                "danger"
-            )
-
+        except (ValueError, KeyError, TypeError) as exc:
+            flash(str(exc), "danger")
 
     with db_conn() as conn:
-
         product_rows = conn.execute(
-            """
-            SELECT
-                id,
-                code,
-                description,
-                stock
-
-            FROM products
-
-            WHERE active=1
-
-            ORDER BY description
-            """
+            """SELECT id,code,description,stock
+               FROM products
+               WHERE active=1
+               ORDER BY description"""
         ).fetchall()
-
-
         rows = conn.execute(
-            """
-            SELECT
-                m.*,
-                p.code,
-                p.description,
-                u.full_name AS user_name
-
-            FROM movements m
-
-            JOIN products p
-                ON p.id=m.product_id
-
-            LEFT JOIN users u
-                ON u.id=m.user_id
-
-            ORDER BY
-                m.id DESC
-
-            LIMIT 100
-            """
+            """SELECT m.*, p.code, p.description, u.full_name AS user_name
+               FROM movements m
+               JOIN products p ON p.id=m.product_id
+               LEFT JOIN users u ON u.id=m.user_id
+               ORDER BY m.id DESC
+               LIMIT 100"""
         ).fetchall()
-
 
     return render_template(
         "movements.html",
         products=product_rows,
-        movements=rows
+        movements=rows,
     )
+
 
 
 @app.route("/vendedores")
@@ -1826,37 +1731,594 @@ def accounts_receivable_history(account_id: int):
 @app.route("/facturas/<int:invoice_id>")
 @login_required
 def invoice_view(invoice_id: int):
+
     with db_conn() as conn:
-        invoice = conn.execute("""SELECT i.*, u.full_name AS user_name FROM invoices i
-            LEFT JOIN users u ON u.id=i.user_id WHERE i.id=?""", (invoice_id,)).fetchone()
-        items = conn.execute("SELECT * FROM invoice_items WHERE invoice_id=?", (invoice_id,)).fetchall()
-        service_items = conn.execute("SELECT * FROM invoice_service_items WHERE invoice_id=?", (invoice_id,)).fetchall()
-        receivable = conn.execute(
-            """SELECT ar.*,
-                      COALESCE((SELECT SUM(p.amount) FROM accounts_receivable_payments p WHERE p.receivable_id=ar.id),0) AS paid_amount
-               FROM accounts_receivable ar WHERE ar.invoice_id=?""",
+
+        invoice = conn.execute(
+            """
+            SELECT
+                i.*,
+                u.full_name AS user_name
+            FROM invoices i
+
+            LEFT JOIN users u
+                ON u.id=i.user_id
+
+            WHERE i.id=?
+            """,
+            (invoice_id,)
+        ).fetchone()
+
+        items = conn.execute(
+            """
+            SELECT *
+            FROM invoice_items
+            WHERE invoice_id=?
+            """,
+            (invoice_id,)
+        ).fetchall()
+
+        service_items = conn.execute(
+            """
+            SELECT *
+            FROM invoice_service_items
+            WHERE invoice_id=?
+            """,
+            (invoice_id,)
+        ).fetchall()
+
+        settings = get_settings(conn)
+
+
+    if not invoice:
+
+        flash(
+            "Remisión no encontrada.",
+            "danger"
+        )
+
+        return redirect(
+            url_for("invoices")
+        )
+
+
+    # =====================================================
+    # PERMISO PARA EDITAR REMISIONES
+    # =====================================================
+
+    current_username = str(
+        g.user["username"] or ""
+    ).strip().lower()
+
+    current_full_name = str(
+        g.user["full_name"] or ""
+    ).strip().lower()
+
+    current_role = str(
+        g.user["role"] or ""
+    ).strip().lower()
+
+
+    can_edit_invoice = (
+        current_role == "administrador"
+        and (
+            current_username == "arturo.lopez"
+            or current_full_name in (
+                "arturo lópez",
+                "arturo lopez"
+            )
+        )
+    )
+
+
+    return render_template(
+        "invoice_view.html",
+
+        invoice=invoice,
+        items=items,
+        service_items=service_items,
+        settings=settings,
+
+        can_edit_invoice=can_edit_invoice
+    )
+
+
+@app.route("/facturas/<int:invoice_id>/editar", methods=["GET", "POST"])
+@arturo_required
+def invoice_edit(invoice_id: int):
+    """Edita una remisión y ajusta inventario/cartera de forma transaccional."""
+
+    with db_conn() as conn:
+        invoice = conn.execute(
+            "SELECT * FROM invoices WHERE id=?",
             (invoice_id,),
         ).fetchone()
-        payments = []
-        if receivable:
-            payments = conn.execute(
-                "SELECT * FROM accounts_receivable_payments WHERE receivable_id=? ORDER BY payment_date DESC,id DESC",
-                (receivable["id"],),
-            ).fetchall()
-        settings = get_settings(conn)
+
     if not invoice:
         flash("Remisión no encontrada.", "danger")
         return redirect(url_for("invoices"))
-    if receivable:
-        receivable = dict(receivable)
-        receivable["balance"] = max(
-            Decimal("0"),
-            Decimal(str(receivable.get("original_amount") or 0)) - Decimal(str(receivable.get("paid_amount") or 0)),
-        )
-        receivable["display_status"] = _receivable_display_status(receivable)
+
+    if request.method == "POST":
+        try:
+            customer_name = (
+                request.form.get("customer_name", "Consumidor final").strip()
+                or "Consumidor final"
+            )
+            customer_document = request.form.get("customer_document", "").strip()
+            customer_phone = request.form.get("customer_phone", "").strip()
+            customer_address = request.form.get("customer_address", "").strip()
+            customer_email = request.form.get("customer_email", "").strip()
+            vehicle_plate = request.form.get("vehicle_plate", "").strip().upper()
+            salesperson_id_raw = request.form.get("salesperson_id", "").strip()
+            payment_method = request.form.get("payment_method", "Efectivo").strip()
+            notes = request.form.get("notes", "").strip()
+            issued_date = request.form.get("issued_date", "").strip()
+            credit_due_date = request.form.get("credit_due_date", "").strip()
+
+            if not salesperson_id_raw:
+                raise ValueError("Selecciona quién realizó la venta.")
+            salesperson_id = int(salesperson_id_raw)
+
+            if payment_method not in ("Efectivo", "Transferencia", "Tarjeta", "Crédito"):
+                raise ValueError("Forma de pago inválida.")
+
+            if issued_date:
+                try:
+                    datetime.strptime(issued_date, "%Y-%m-%d")
+                except ValueError as exc:
+                    raise ValueError("La fecha de la remisión no es válida.") from exc
+                issued_at = f"{issued_date}T12:00:00"
+            else:
+                issued_at = invoice["issued_at"]
+
+            if credit_due_date:
+                try:
+                    datetime.strptime(credit_due_date, "%Y-%m-%d")
+                except ValueError as exc:
+                    raise ValueError("La fecha acordada de pago no es válida.") from exc
+
+            product_rows_raw = [
+                x
+                for x in zip(
+                    request.form.getlist("product_id[]"),
+                    request.form.getlist("quantity[]"),
+                    request.form.getlist("price[]"),
+                )
+                if str(x[0]).strip()
+            ]
+
+            service_rows_raw = [
+                x
+                for x in zip(
+                    request.form.getlist("service_id[]"),
+                    request.form.getlist("service_worker[]"),
+                    request.form.getlist("service_quantity[]"),
+                    request.form.getlist("service_price[]"),
+                )
+                if str(x[0]).strip()
+            ]
+
+            if not product_rows_raw and not service_rows_raw:
+                raise ValueError(
+                    "La remisión debe contener al menos un producto o un servicio."
+                )
+
+            with db_conn() as conn:
+                invoice_sql = "SELECT * FROM invoices WHERE id=?"
+                if db.engine.dialect.name == "postgresql":
+                    invoice_sql += " FOR UPDATE"
+                current_invoice = conn.execute(invoice_sql, (invoice_id,)).fetchone()
+                if not current_invoice:
+                    raise ValueError("La remisión ya no existe.")
+
+                salesperson = conn.execute(
+                    "SELECT id,name FROM salespeople WHERE id=? AND active=1",
+                    (salesperson_id,),
+                ).fetchone()
+                if not salesperson:
+                    raise ValueError("El vendedor seleccionado no está disponible.")
+
+                # Cantidades anteriores por producto.
+                old_items = conn.execute(
+                    "SELECT * FROM invoice_items WHERE invoice_id=?",
+                    (invoice_id,),
+                ).fetchall()
+                old_quantities: dict[int, Decimal] = {}
+                for item in old_items:
+                    pid = int(item["product_id"])
+                    old_quantities[pid] = old_quantities.get(pid, Decimal("0")) + Decimal(
+                        str(item["quantity"] or 0)
+                    )
+
+                requested_product_ids = {int(row[0]) for row in product_rows_raw}
+                all_product_ids = set(old_quantities) | requested_product_ids
+
+                # Bloquear productos implicados en PostgreSQL.
+                product_map: dict[int, dict[str, Any]] = {}
+                for product_id in sorted(all_product_ids):
+                    product_sql = "SELECT * FROM products WHERE id=?"
+                    if db.engine.dialect.name == "postgresql":
+                        product_sql += " FOR UPDATE"
+                    product = conn.execute(product_sql, (product_id,)).fetchone()
+                    if not product:
+                        raise ValueError("Uno de los productos ya no existe.")
+                    product_map[product_id] = product
+
+                subtotal = Decimal("0")
+                product_lines = []
+                new_quantities: dict[int, Decimal] = {}
+
+                for product_id_raw, qty_raw, price_raw in product_rows_raw:
+                    product_id = int(product_id_raw)
+                    qty = parse_decimal(qty_raw)
+                    price = parse_decimal(price_raw)
+
+                    if qty <= Decimal("0"):
+                        raise ValueError("La cantidad de cada producto debe ser mayor que cero.")
+                    if price < Decimal("0"):
+                        raise ValueError("El precio de un producto no puede ser negativo.")
+
+                    product = product_map[product_id]
+                    line_total = qty * price
+                    subtotal += line_total
+                    product_lines.append((product, qty, price, line_total))
+                    new_quantities[product_id] = new_quantities.get(
+                        product_id, Decimal("0")
+                    ) + qty
+
+                # Validar y aplicar únicamente la diferencia contra la remisión anterior.
+                inventory_adjustments = []
+                for product_id in sorted(all_product_ids):
+                    product = product_map[product_id]
+                    current_stock = Decimal(str(product["stock"] or 0))
+                    old_qty = old_quantities.get(product_id, Decimal("0"))
+                    new_qty = new_quantities.get(product_id, Decimal("0"))
+                    adjustment = old_qty - new_qty
+                    new_stock = current_stock + adjustment
+
+                    if new_stock < Decimal("0"):
+                        available_for_edit = current_stock + old_qty
+                        raise ValueError(
+                            f"Stock insuficiente para {product['description']}. "
+                            f"Disponible considerando la remisión actual: {available_for_edit:g}."
+                        )
+
+                    if adjustment != Decimal("0"):
+                        inventory_adjustments.append(
+                            (product_id, product, adjustment, new_stock)
+                        )
+
+                movement_time = datetime.now().isoformat(timespec="seconds")
+                for product_id, product, adjustment, new_stock in inventory_adjustments:
+                    conn.execute(
+                        """UPDATE products
+                           SET stock=?, updated_at=CURRENT_TIMESTAMP
+                           WHERE id=?""",
+                        (float(new_stock), product_id),
+                    )
+                    movement_type = (
+                        "Ajuste remisión entrada"
+                        if adjustment > 0
+                        else "Ajuste remisión salida"
+                    )
+                    conn.execute(
+                        """INSERT INTO movements(
+                               product_id,movement_type,quantity,reference,notes,created_at,user_id
+                           ) VALUES(?,?,?,?,?,?,?)""",
+                        (
+                            product_id,
+                            movement_type,
+                            float(abs(adjustment)),
+                            current_invoice["number"],
+                            "Edición de remisión realizada por Arturo López",
+                            movement_time,
+                            g.user["id"],
+                        ),
+                    )
+
+                conn.execute(
+                    "DELETE FROM invoice_items WHERE invoice_id=?",
+                    (invoice_id,),
+                )
+                for product, qty, price, line_total in product_lines:
+                    conn.execute(
+                        """INSERT INTO invoice_items(
+                               invoice_id,product_id,code,description,quantity,unit_price,line_total
+                           ) VALUES(?,?,?,?,?,?,?)""",
+                        (
+                            invoice_id,
+                            product["id"],
+                            product["code"],
+                            product["description"],
+                            float(qty),
+                            float(price),
+                            float(line_total),
+                        ),
+                    )
+
+                # Reconstruir servicios.
+                service_lines = []
+                for service_id_raw, worker_name, qty_raw, price_raw in service_rows_raw:
+                    service_id = int(service_id_raw)
+                    worker_name = (worker_name or "").strip()
+                    qty = parse_decimal(qty_raw)
+                    price = parse_decimal(price_raw)
+
+                    if not worker_name:
+                        raise ValueError(
+                            "Indica el trabajador responsable de cada servicio."
+                        )
+                    if qty <= Decimal("0") or price < Decimal("0"):
+                        raise ValueError(
+                            "Revisa las cantidades y precios de los servicios."
+                        )
+
+                    service = conn.execute(
+                        "SELECT * FROM services WHERE id=?",
+                        (service_id,),
+                    ).fetchone()
+                    if not service:
+                        raise ValueError("Uno de los servicios ya no existe.")
+
+                    line_total = qty * price
+                    worker_pct = Decimal(str(service["worker_percentage"] or 70))
+                    business_pct = Decimal(str(service["business_percentage"] or 30))
+                    worker_amount = (
+                        line_total * worker_pct / Decimal("100")
+                    ).quantize(Decimal("0.01"))
+                    business_amount = line_total - worker_amount
+                    subtotal += line_total
+
+                    service_lines.append(
+                        (
+                            service,
+                            worker_name,
+                            qty,
+                            price,
+                            line_total,
+                            worker_pct,
+                            business_pct,
+                            worker_amount,
+                            business_amount,
+                        )
+                    )
+
+                conn.execute(
+                    "DELETE FROM invoice_service_items WHERE invoice_id=?",
+                    (invoice_id,),
+                )
+                for (
+                    service,
+                    worker_name,
+                    qty,
+                    price,
+                    line_total,
+                    worker_pct,
+                    business_pct,
+                    worker_amount,
+                    business_amount,
+                ) in service_lines:
+                    conn.execute(
+                        """INSERT INTO invoice_service_items(
+                               invoice_id,service_id,service_name,worker_name,quantity,unit_price,line_total,
+                               worker_percentage,business_percentage,worker_amount,business_amount
+                           ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                        (
+                            invoice_id,
+                            service["id"],
+                            service["name"],
+                            worker_name,
+                            float(qty),
+                            float(price),
+                            float(line_total),
+                            float(worker_pct),
+                            float(business_pct),
+                            float(worker_amount),
+                            float(business_amount),
+                        ),
+                    )
+
+                settings = get_settings(conn)
+                tax_rate = Decimal(str(settings["tax_rate"] or 0))
+                tax = (subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+                total = subtotal + tax
+
+                # Cliente: conservar/actualizar o volver a consumidor final.
+                customer_id = None
+                if customer_name.lower() != "consumidor final" or customer_document:
+                    existing = None
+                    if customer_document:
+                        existing = conn.execute(
+                            "SELECT id FROM customers WHERE document=? LIMIT 1",
+                            (customer_document,),
+                        ).fetchone()
+
+                    if existing:
+                        customer_id = existing["id"]
+                        conn.execute(
+                            """UPDATE customers
+                               SET name=?,phone=?,email=?,address=?
+                               WHERE id=?""",
+                            (
+                                customer_name,
+                                customer_phone,
+                                customer_email,
+                                customer_address,
+                                customer_id,
+                            ),
+                        )
+                    else:
+                        cur_customer = conn.execute(
+                            """INSERT INTO customers(document,name,phone,email,address)
+                               VALUES(?,?,?,?,?)""",
+                            (
+                                customer_document,
+                                customer_name,
+                                customer_phone,
+                                customer_email,
+                                customer_address,
+                            ),
+                        )
+                        customer_id = cur_customer.lastrowid
+
+                # Cartera: conservar pagos ya realizados y recalcular saldo/estado.
+                receivable = conn.execute(
+                    "SELECT * FROM accounts_receivable WHERE invoice_id=?",
+                    (invoice_id,),
+                ).fetchone()
+                paid_amount = Decimal("0")
+                if receivable:
+                    paid_row = conn.execute(
+                        """SELECT COALESCE(SUM(amount),0) AS paid
+                           FROM accounts_receivable_payments
+                           WHERE receivable_id=?""",
+                        (receivable["id"],),
+                    ).fetchone()
+                    paid_amount = Decimal(str((paid_row or {}).get("paid") or 0))
+
+                if payment_method == "Crédito":
+                    if paid_amount > total:
+                        raise ValueError(
+                            "No se puede reducir el total de la remisión por debajo "
+                            "de los pagos que ya fueron registrados."
+                        )
+
+                    if paid_amount >= total and total > Decimal("0"):
+                        credit_status = "PAGADA"
+                    elif paid_amount > Decimal("0"):
+                        credit_status = "PAGO PARCIAL"
+                    else:
+                        credit_status = "PENDIENTE"
+
+                    if credit_due_date and paid_amount < total:
+                        due_date = datetime.strptime(
+                            credit_due_date, "%Y-%m-%d"
+                        ).date()
+                        if due_date < datetime.now().date():
+                            credit_status = "VENCIDA"
+
+                    closed_at = (
+                        datetime.now().isoformat(timespec="seconds")
+                        if credit_status == "PAGADA"
+                        else None
+                    )
+
+                    if receivable:
+                        conn.execute(
+                            """UPDATE accounts_receivable
+                               SET original_amount=?,due_date=?,status=?,closed_at=?
+                               WHERE id=?""",
+                            (
+                                float(total),
+                                credit_due_date or None,
+                                credit_status,
+                                closed_at,
+                                receivable["id"],
+                            ),
+                        )
+                    else:
+                        conn.execute(
+                            """INSERT INTO accounts_receivable(
+                                   invoice_id,original_amount,due_date,status,created_at,closed_at
+                               ) VALUES(?,?,?,?,?,?)""",
+                            (
+                                invoice_id,
+                                float(total),
+                                credit_due_date or None,
+                                credit_status,
+                                datetime.now().isoformat(timespec="seconds"),
+                                closed_at,
+                            ),
+                        )
+                elif receivable:
+                    if paid_amount > Decimal("0"):
+                        raise ValueError(
+                            "Esta remisión a crédito ya tiene pagos registrados. "
+                            "No puede cambiarse a otra forma de pago desde la edición."
+                        )
+                    conn.execute(
+                        "DELETE FROM accounts_receivable_payments WHERE receivable_id=?",
+                        (receivable["id"],),
+                    )
+                    conn.execute(
+                        "DELETE FROM accounts_receivable WHERE id=?",
+                        (receivable["id"],),
+                    )
+
+                conn.execute(
+                    """UPDATE invoices
+                       SET customer_id=?,customer_name=?,customer_document=?,customer_phone=?,
+                           customer_address=?,vehicle_plate=?,salesperson_id=?,salesperson_name=?,
+                           issued_at=?,subtotal=?,tax=?,total=?,payment_method=?,notes=?
+                       WHERE id=?""",
+                    (
+                        customer_id,
+                        customer_name,
+                        customer_document,
+                        customer_phone,
+                        customer_address,
+                        vehicle_plate,
+                        salesperson["id"],
+                        salesperson["name"],
+                        issued_at,
+                        float(subtotal),
+                        float(tax),
+                        float(total),
+                        payment_method,
+                        notes,
+                        invoice_id,
+                    ),
+                )
+
+            generate_invoice_pdf(invoice_id)
+            flash(
+                f"Remisión {invoice['number']} actualizada correctamente.",
+                "success",
+            )
+            return redirect(url_for("invoice_view", invoice_id=invoice_id))
+
+        except (ValueError, KeyError, TypeError) as exc:
+            flash(str(exc), "danger")
+
+    with db_conn() as conn:
+        invoice = conn.execute(
+            "SELECT * FROM invoices WHERE id=?",
+            (invoice_id,),
+        ).fetchone()
+        items = conn.execute(
+            "SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id",
+            (invoice_id,),
+        ).fetchall()
+        service_items = conn.execute(
+            "SELECT * FROM invoice_service_items WHERE invoice_id=? ORDER BY id",
+            (invoice_id,),
+        ).fetchall()
+        products = conn.execute(
+            """SELECT id,code,description,stock,sale_price,unit
+               FROM products
+               WHERE active=1
+               ORDER BY description"""
+        ).fetchall()
+        services = conn.execute(
+            "SELECT * FROM services WHERE active=1 ORDER BY name"
+        ).fetchall()
+        salespeople = conn.execute(
+            "SELECT id,name FROM salespeople WHERE active=1 ORDER BY name"
+        ).fetchall()
+        receivable = conn.execute(
+            "SELECT * FROM accounts_receivable WHERE invoice_id=?",
+            (invoice_id,),
+        ).fetchone()
+
     return render_template(
-        "invoice_view.html", invoice=invoice, items=items, service_items=service_items,
-        settings=settings, receivable=receivable, payments=payments
+        "invoice_edit.html",
+        invoice=invoice,
+        items=items,
+        service_items=service_items,
+        products=products,
+        services=services,
+        salespeople=salespeople,
+        receivable=receivable,
     )
 
 

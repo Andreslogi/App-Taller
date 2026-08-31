@@ -1,24 +1,49 @@
 {% extends 'base.html' %}
 
-{% set heading = 'Remisión ' ~ invoice.number %}
+{% set heading='Remisión ' ~ invoice.number %}
 
 {% block content %}
 
-<div class="actions no-print" style="margin-bottom:15px">
+<!-- =========================================
+     BOTONES SUPERIORES
+========================================== -->
+
+<div class="actions" style="margin-bottom: 18px;">
 
     <a
         class="btn btn-primary"
-        href="{{ url_for('invoice_pdf', invoice_id=invoice.id) }}"
+        href="{{ url_for(
+            'invoice_pdf',
+            invoice_id=invoice.id
+        ) }}"
     >
         Descargar PDF
     </a>
 
+
     <button
         class="btn btn-light"
+        type="button"
         onclick="window.print()"
     >
         Imprimir
     </button>
+
+
+    {% if can_edit_invoice %}
+
+        <a
+            class="btn btn-warning"
+            href="{{ url_for(
+                'invoice_edit',
+                invoice_id=invoice.id
+            ) }}"
+        >
+            Editar remisión
+        </a>
+
+    {% endif %}
+
 
     <a
         class="btn btn-success"
@@ -30,40 +55,94 @@
 </div>
 
 
-<div class="card invoice-paper">
+<!-- =========================================
+     REMISIÓN
+========================================== -->
 
-    <!-- ENCABEZADO -->
-    <div class="invoice-header">
+<div
+    class="card"
+    style="
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+    "
+>
+
+    <!-- =====================================
+         ENCABEZADO
+    ====================================== -->
+
+    <div
+        style="
+            display:flex;
+            justify-content:space-between;
+            gap:20px;
+            align-items:flex-start;
+            padding-bottom:18px;
+            border-bottom:3px solid #1f4e78;
+        "
+    >
 
         <div>
 
-            <h2>
+            <h2
+                style="
+                    margin:0 0 8px 0;
+                "
+            >
                 {{ settings.business_name }}
             </h2>
 
-            <div>
-                {{ settings.nit }}
-            </div>
 
-            <div>
-                {{ settings.address }}
-            </div>
+            {% if settings.nit %}
+                <div>
+                    {{ settings.nit }}
+                </div>
+            {% endif %}
 
-            <div>
-                {{ settings.phone }}
-                {{ settings.email }}
-            </div>
+
+            {% if settings.address %}
+                <div>
+                    {{ settings.address }}
+                </div>
+            {% endif %}
+
+
+            {% if settings.phone %}
+                <div>
+                    {{ settings.phone }}
+                </div>
+            {% endif %}
+
+
+            {% if settings.email %}
+                <div>
+                    {{ settings.email }}
+                </div>
+            {% endif %}
 
         </div>
 
 
-        <div class="invoice-number">
+        <div
+            style="
+                text-align:right;
+            "
+        >
 
-            <h2>
+            <h2
+                style="
+                    margin:0 0 18px 0;
+                "
+            >
                 REMISIÓN
             </h2>
 
-            <h3>
+            <h3
+                style="
+                    margin:0 0 18px 0;
+                "
+            >
                 {{ invoice.number }}
             </h3>
 
@@ -76,69 +155,84 @@
     </div>
 
 
-    <!-- DATOS DEL CLIENTE / REMISIÓN -->
+    <!-- =====================================
+         DATOS DEL CLIENTE
+    ====================================== -->
+
     <div
-        class="grid grid-2"
-        style="margin-top:20px"
+        style="
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:25px;
+            margin-top:20px;
+            margin-bottom:25px;
+        "
     >
 
         <div>
 
-            <b>Cliente:</b>
-            {{ invoice.customer_name }}
+            <div>
+                <strong>Cliente:</strong>
+                {{ invoice.customer_name }}
+            </div>
 
-            <br>
+            <div>
+                <strong>Documento:</strong>
+                {{ invoice.customer_document or '-' }}
+            </div>
 
-            <b>Documento:</b>
-            {{ invoice.customer_document or '-' }}
+            <div>
+                <strong>Teléfono:</strong>
+                {{ invoice.customer_phone or '-' }}
+            </div>
 
-            <br>
-
-            <b>Teléfono:</b>
-            {{ invoice.customer_phone or '-' }}
-
-            <br>
-
-            <b>Placa:</b>
-            {{ invoice.vehicle_plate or '-' }}
+            <div>
+                <strong>Placa:</strong>
+                {{ invoice.vehicle_plate or '-' }}
+            </div>
 
         </div>
 
 
         <div>
 
-            <b>Dirección:</b>
-            {{ invoice.customer_address or '-' }}
+            <div>
+                <strong>Dirección:</strong>
+                {{ invoice.customer_address or '-' }}
+            </div>
 
-            <br>
+            <div>
+                <strong>Forma de pago:</strong>
+                {{ invoice.payment_method }}
+            </div>
 
-            <b>Forma de pago:</b>
-            {{ invoice.payment_method }}
+            <div>
+                <strong>Estado:</strong>
+                {{ invoice.status }}
+            </div>
 
-            <br>
+            <div>
+                <strong>Vendedor:</strong>
+                {{ invoice.salesperson_name or '-' }}
+            </div>
 
-            <b>Estado:</b>
-            {{ invoice.status }}
-
-            <br>
-
-            <b>Vendedor:</b>
-            {{ invoice.salesperson_name or '-' }}
-
-            <br>
-
-            <b>Usuario que registró:</b>
-            {{ invoice.user_name or '-' }}
+            <div>
+                <strong>Usuario que registró:</strong>
+                {{ invoice.user_name or '-' }}
+            </div>
 
         </div>
 
     </div>
 
 
-    <!-- PRODUCTOS -->
+    <!-- =====================================
+         PRODUCTOS
+    ====================================== -->
+
     {% if items %}
 
-        <h3 style="margin-top:22px">
+        <h3>
             Productos
         </h3>
 
@@ -149,11 +243,27 @@
                 <thead>
 
                     <tr>
-                        <th>Código</th>
-                        <th>Descripción</th>
-                        <th>Cantidad</th>
-                        <th>Precio</th>
-                        <th>Total</th>
+
+                        <th>
+                            Código
+                        </th>
+
+                        <th>
+                            Descripción
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
+                        <th>
+                            Total
+                        </th>
+
                     </tr>
 
                 </thead>
@@ -161,33 +271,33 @@
 
                 <tbody>
 
-                    {% for i in items %}
+                {% for item in items %}
 
-                        <tr>
+                    <tr>
 
-                            <td>
-                                {{ i.code }}
-                            </td>
+                        <td>
+                            {{ item.code }}
+                        </td>
 
-                            <td>
-                                {{ i.description }}
-                            </td>
+                        <td>
+                            {{ item.description }}
+                        </td>
 
-                            <td>
-                                {{ i.quantity }}
-                            </td>
+                        <td>
+                            {{ item.quantity|int }}
+                        </td>
 
-                            <td>
-                                {{ i.unit_price|money }}
-                            </td>
+                        <td>
+                            {{ item.unit_price|money }}
+                        </td>
 
-                            <td>
-                                {{ i.line_total|money }}
-                            </td>
+                        <td>
+                            {{ item.line_total|money }}
+                        </td>
 
-                        </tr>
+                    </tr>
 
-                    {% endfor %}
+                {% endfor %}
 
                 </tbody>
 
@@ -198,10 +308,17 @@
     {% endif %}
 
 
-    <!-- SERVICIOS -->
+    <!-- =====================================
+         SERVICIOS
+    ====================================== -->
+
     {% if service_items %}
 
-        <h3 style="margin-top:22px">
+        <h3
+            style="
+                margin-top:25px;
+            "
+        >
             Servicios
         </h3>
 
@@ -212,10 +329,27 @@
                 <thead>
 
                     <tr>
-                        <th>Servicio</th>
-                        <th>Cantidad</th>
-                        <th>Valor</th>
-                        <th>Total</th>
+
+                        <th>
+                            Servicio
+                        </th>
+
+                        <th>
+                            Trabajador
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
+                        <th>
+                            Total
+                        </th>
+
                     </tr>
 
                 </thead>
@@ -223,29 +357,33 @@
 
                 <tbody>
 
-                    {% for s in service_items %}
+                {% for item in service_items %}
 
-                        <tr>
+                    <tr>
 
-                            <td>
-                                {{ s.service_name }}
-                            </td>
+                        <td>
+                            {{ item.service_name }}
+                        </td>
 
-                            <td>
-                                {{ s.quantity }}
-                            </td>
+                        <td>
+                            {{ item.worker_name }}
+                        </td>
 
-                            <td>
-                                {{ s.unit_price|money }}
-                            </td>
+                        <td>
+                            {{ item.quantity|int }}
+                        </td>
 
-                            <td>
-                                {{ s.line_total|money }}
-                            </td>
+                        <td>
+                            {{ item.unit_price|money }}
+                        </td>
 
-                        </tr>
+                        <td>
+                            {{ item.line_total|money }}
+                        </td>
 
-                    {% endfor %}
+                    </tr>
+
+                {% endfor %}
 
                 </tbody>
 
@@ -256,76 +394,154 @@
     {% endif %}
 
 
-    <!-- TOTALES -->
-    <div class="totals">
+    <!-- =====================================
+         TOTALES
+    ====================================== -->
 
-        <div class="row">
+    <div
+        style="
+            display:flex;
+            justify-content:flex-end;
+            margin-top:25px;
+        "
+    >
 
-            <span>
-                Subtotal
-            </span>
+        <table
+            style="
+                min-width:320px;
+            "
+        >
 
-            <b>
-                {{ invoice.subtotal|money }}
-            </b>
+            <tr>
 
-        </div>
+                <td
+                    style="
+                        padding:8px;
+                    "
+                >
+                    <strong>
+                        Subtotal
+                    </strong>
+                </td>
+
+                <td
+                    style="
+                        padding:8px;
+                        text-align:right;
+                    "
+                >
+                    {{ invoice.subtotal|money }}
+                </td>
+
+            </tr>
 
 
-        <div class="row">
+            <tr>
 
-            <span>
-                Impuesto
-            </span>
+                <td
+                    style="
+                        padding:8px;
+                    "
+                >
+                    <strong>
+                        Impuesto
+                    </strong>
+                </td>
 
-            <b>
-                {{ invoice.tax|money }}
-            </b>
+                <td
+                    style="
+                        padding:8px;
+                        text-align:right;
+                    "
+                >
+                    {{ invoice.tax|money }}
+                </td>
 
-        </div>
+            </tr>
 
 
-        <div class="row grand">
+            <tr>
 
-            <span>
-                Total
-            </span>
+                <td
+                    style="
+                        padding:10px;
+                        border-top:2px solid #1f4e78;
+                    "
+                >
+                    <strong>
+                        TOTAL
+                    </strong>
+                </td>
 
-            <span>
-                {{ invoice.total|money }}
-            </span>
+                <td
+                    style="
+                        padding:10px;
+                        text-align:right;
+                        border-top:2px solid #1f4e78;
+                    "
+                >
+                    <strong>
+                        {{ invoice.total|money }}
+                    </strong>
+                </td>
 
-        </div>
+            </tr>
+
+        </table>
 
     </div>
 
 
-    <!-- OBSERVACIONES -->
+    <!-- =====================================
+         OBSERVACIONES
+    ====================================== -->
+
     {% if invoice.notes %}
 
-        <p>
-            <b>Observaciones:</b>
-            {{ invoice.notes }}
-        </p>
+        <div
+            style="
+                margin-top:25px;
+                padding-top:15px;
+                border-top:1px solid #ddd;
+            "
+        >
+
+            <strong>
+                Observaciones:
+            </strong>
+
+            <div>
+                {{ invoice.notes }}
+            </div>
+
+        </div>
 
     {% endif %}
 
 </div>
 
 
-{% if receivable %}
-<div class="card">
-    <h3>Cuenta por cobrar</h3>
-    <div class="grid grid-2">
-        <div><div class="muted">Estado</div><strong>{{ receivable.display_status }}</strong></div>
-        <div><div class="muted">Saldo pendiente</div><strong>{{ receivable.balance|money }}</strong></div>
-        <div><div class="muted">Abonado</div><strong>{{ receivable.paid_amount|money }}</strong></div>
-        <div><div class="muted">Fecha acordada</div><strong>{{ receivable.due_date or 'Sin fecha' }}</strong></div>
-    </div>
-    <div class="actions" style="margin-top:14px;">
-        <a class="btn btn-light" href="{{ url_for('accounts_receivable_history', account_id=receivable.id) }}">Ver historial de pagos</a>
-        <a class="btn" href="{{ url_for('accounts_receivable') }}">Ir a cuentas por cobrar</a>
-    </div>
-</div>
-{% endif %}
+<!-- =========================================
+     OCULTAR BOTONES AL IMPRIMIR
+========================================== -->
+
+<style>
+
+@media print {
+
+    .actions,
+    aside,
+    nav {
+        display: none !important;
+    }
+
+    .card {
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+}
+
+</style>
+
 {% endblock %}

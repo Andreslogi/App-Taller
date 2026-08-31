@@ -1,0 +1,942 @@
+{% extends 'base.html' %}
+
+{% set heading='Editar remisión ' ~ invoice.number %}
+
+{% block content %}
+
+<div class="card">
+
+    <div class="alert alert-warning">
+
+        <strong>Edición administrativa</strong>
+
+        <div>
+            Los cambios realizados aquí pueden modificar
+            inventario, valores de la remisión y cuentas por cobrar.
+        </div>
+
+    </div>
+
+</div>
+
+
+<form method="post">
+
+    <!-- =====================================================
+         DATOS GENERALES
+    ====================================================== -->
+
+    <div class="card">
+
+        <h3>Datos de la remisión</h3>
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>
+                    Fecha
+                </label>
+
+                <input
+                    type="date"
+                    name="issued_date"
+                    value="{{ invoice.issued_at[:10] }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Cliente
+                </label>
+
+                <input
+                    name="customer_name"
+                    value="{{ invoice.customer_name }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Documento
+                </label>
+
+                <input
+                    name="customer_document"
+                    value="{{ invoice.customer_document or '' }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Teléfono
+                </label>
+
+                <input
+                    name="customer_phone"
+                    value="{{ invoice.customer_phone or '' }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Dirección
+                </label>
+
+                <input
+                    name="customer_address"
+                    value="{{ invoice.customer_address or '' }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Placa
+                </label>
+
+                <input
+                    name="vehicle_plate"
+                    value="{{ invoice.vehicle_plate or '' }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Vendedor
+                </label>
+
+                <select
+                    name="salesperson_id"
+                    required
+                >
+
+                    {% for seller in salespeople %}
+
+                        <option
+                            value="{{ seller.id }}"
+                            {% if seller.id == invoice.salesperson_id %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ seller.name }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Forma de pago
+                </label>
+
+                <select
+                    name="payment_method"
+                    id="payment_method"
+                    onchange="toggleCredit()"
+                >
+
+                    {% for method in [
+                        'Efectivo',
+                        'Transferencia',
+                        'Tarjeta',
+                        'Crédito'
+                    ] %}
+
+                        <option
+                            value="{{ method }}"
+                            {% if method == invoice.payment_method %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ method }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             DATOS DEL CRÉDITO
+        ================================================== -->
+
+        <div
+            id="creditFields"
+            style="margin-top:15px;"
+        >
+
+            <div class="form-group">
+
+                <label>
+                    Fecha acordada de pago
+                </label>
+
+                <input
+                    type="date"
+                    name="credit_due_date"
+                    value="{% if receivable and receivable.due_date %}{{ receivable.due_date }}{% endif %}"
+                >
+
+                <div class="muted">
+                    Opcional.
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label>
+                Observaciones
+            </label>
+
+            <textarea
+                name="notes"
+                rows="3"
+            >{{ invoice.notes or '' }}</textarea>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         PRODUCTOS
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="actions">
+
+            <h3>
+                Productos
+            </h3>
+
+            <button
+                type="button"
+                class="btn btn-success"
+                onclick="addProductRow()"
+            >
+                + Agregar producto
+            </button>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Producto
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
+                        <th>
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="productBody">
+
+                {% for item in items %}
+
+                    <tr>
+
+                        <td>
+
+                            <select
+                                name="product_id[]"
+                                required
+                                onchange="updateProductPrice(this)"
+                            >
+
+                                {% for p in products %}
+
+                                    <option
+                                        value="{{ p.id }}"
+                                        data-price="{{ p.sale_price }}"
+                                        {% if p.id == item.product_id %}
+                                            selected
+                                        {% endif %}
+                                    >
+                                        {{ p.code }}
+                                        -
+                                        {{ p.description }}
+                                        (Stock {{ p.stock|int }})
+                                    </option>
+
+                                {% endfor %}
+
+                            </select>
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="number"
+                                name="quantity[]"
+                                min="1"
+                                step="1"
+                                value="{{ item.quantity|int }}"
+                                required
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="number"
+                                name="price[]"
+                                min="0"
+                                step="1"
+                                value="{{ item.unit_price|int }}"
+                                required
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-light"
+                                onclick="this.closest('tr').remove()"
+                            >
+                                Quitar
+                            </button>
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         SERVICIOS
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="actions">
+
+            <h3>
+                Servicios
+            </h3>
+
+            <button
+                type="button"
+                class="btn btn-success"
+                onclick="addServiceRow()"
+            >
+                + Agregar servicio
+            </button>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Servicio
+                        </th>
+
+                        <th>
+                            Trabajador
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
+                        <th>
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="serviceBody">
+
+                {% for item in service_items %}
+
+                    <tr>
+
+                        <td>
+
+                            <select
+                                name="service_id[]"
+                                required
+                                onchange="updateServicePrice(this)"
+                            >
+
+                                {% for service in services %}
+
+                                    <option
+                                        value="{{ service.id }}"
+                                        data-price="{{ service.default_price }}"
+                                        {% if service.id == item.service_id %}
+                                            selected
+                                        {% endif %}
+                                    >
+                                        {{ service.name }}
+                                    </option>
+
+                                {% endfor %}
+
+                            </select>
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                name="service_worker[]"
+                                value="{{ item.worker_name }}"
+                                required
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="number"
+                                name="service_quantity[]"
+                                value="{{ item.quantity|int }}"
+                                min="1"
+                                step="1"
+                                required
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="number"
+                                name="service_price[]"
+                                value="{{ item.unit_price|int }}"
+                                min="0"
+                                step="1"
+                                required
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-light"
+                                onclick="this.closest('tr').remove()"
+                            >
+                                Quitar
+                            </button>
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         ACCIONES
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="actions">
+
+            <button
+                type="submit"
+                class="btn btn-primary"
+                onclick="
+                    return confirm(
+                        '¿Confirmas los cambios? Esta operación puede modificar inventario y cuentas por cobrar.'
+                    );
+                "
+            >
+                Guardar cambios
+            </button>
+
+
+            <a
+                class="btn btn-light"
+                href="{{ url_for(
+                    'invoice_view',
+                    invoice_id=invoice.id
+                ) }}"
+            >
+                Cancelar
+            </a>
+
+        </div>
+
+    </div>
+
+</form>
+
+
+<script>
+
+/* =========================================================
+   MOSTRAR / OCULTAR CAMPOS DE CRÉDITO
+========================================================= */
+
+function toggleCredit() {
+
+    const payment =
+        document.getElementById(
+            "payment_method"
+        );
+
+    const fields =
+        document.getElementById(
+            "creditFields"
+        );
+
+    if (!payment || !fields) {
+        return;
+    }
+
+    if (
+        payment.value === "Crédito"
+    ) {
+
+        fields.style.display =
+            "block";
+
+    }
+    else {
+
+        fields.style.display =
+            "none";
+
+    }
+
+}
+
+
+/* =========================================================
+   CARGAR PRECIO DEL PRODUCTO
+========================================================= */
+
+function updateProductPrice(
+    selectElement
+) {
+
+    if (!selectElement) {
+        return;
+    }
+
+    const selectedOption =
+        selectElement.options[
+            selectElement.selectedIndex
+        ];
+
+    if (!selectedOption) {
+        return;
+    }
+
+    const price =
+        selectedOption.dataset.price || 0;
+
+    const row =
+        selectElement.closest(
+            "tr"
+        );
+
+    if (!row) {
+        return;
+    }
+
+    const priceInput =
+        row.querySelector(
+            'input[name="price[]"]'
+        );
+
+    if (!priceInput) {
+        return;
+    }
+
+    const numericPrice =
+        parseFloat(price) || 0;
+
+    priceInput.value =
+        Math.round(
+            numericPrice
+        );
+
+}
+
+
+/* =========================================================
+   CARGAR PRECIO DEL SERVICIO
+========================================================= */
+
+function updateServicePrice(
+    selectElement
+) {
+
+    if (!selectElement) {
+        return;
+    }
+
+    const selectedOption =
+        selectElement.options[
+            selectElement.selectedIndex
+        ];
+
+    if (!selectedOption) {
+        return;
+    }
+
+    const price =
+        selectedOption.dataset.price || 0;
+
+    const row =
+        selectElement.closest(
+            "tr"
+        );
+
+    if (!row) {
+        return;
+    }
+
+    const priceInput =
+        row.querySelector(
+            'input[name="service_price[]"]'
+        );
+
+    if (!priceInput) {
+        return;
+    }
+
+    const numericPrice =
+        parseFloat(price) || 0;
+
+    priceInput.value =
+        Math.round(
+            numericPrice
+        );
+
+}
+
+
+/* =========================================================
+   AGREGAR FILA DE PRODUCTO
+========================================================= */
+
+function addProductRow() {
+
+    const tbody =
+        document.getElementById(
+            "productBody"
+        );
+
+    if (!tbody) {
+        return;
+    }
+
+    const row =
+        document.createElement(
+            "tr"
+        );
+
+    row.innerHTML = `
+
+        <td>
+
+            <select
+                name="product_id[]"
+                required
+                onchange="updateProductPrice(this)"
+            >
+
+                <option
+                    value=""
+                    data-price="0"
+                >
+                    Seleccionar producto
+                </option>
+
+                {% for p in products %}
+
+                    <option
+                        value="{{ p.id }}"
+                        data-price="{{ p.sale_price }}"
+                    >
+                        {{ p.code }}
+                        -
+                        {{ p.description }}
+                        (Stock {{ p.stock|int }})
+                    </option>
+
+                {% endfor %}
+
+            </select>
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="quantity[]"
+                min="1"
+                step="1"
+                value="1"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="price[]"
+                min="0"
+                step="1"
+                value="0"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <button
+                type="button"
+                class="btn btn-sm btn-light"
+                onclick="this.closest('tr').remove()"
+            >
+                Quitar
+            </button>
+
+        </td>
+
+    `;
+
+    tbody.appendChild(
+        row
+    );
+
+}
+
+
+/* =========================================================
+   AGREGAR FILA DE SERVICIO
+========================================================= */
+
+function addServiceRow() {
+
+    const tbody =
+        document.getElementById(
+            "serviceBody"
+        );
+
+    if (!tbody) {
+        return;
+    }
+
+    const row =
+        document.createElement(
+            "tr"
+        );
+
+    row.innerHTML = `
+
+        <td>
+
+            <select
+                name="service_id[]"
+                required
+                onchange="updateServicePrice(this)"
+            >
+
+                <option
+                    value=""
+                    data-price="0"
+                >
+                    Seleccionar servicio
+                </option>
+
+                {% for service in services %}
+
+                    <option
+                        value="{{ service.id }}"
+                        data-price="{{ service.default_price }}"
+                    >
+                        {{ service.name }}
+                    </option>
+
+                {% endfor %}
+
+            </select>
+
+        </td>
+
+
+        <td>
+
+            <input
+                name="service_worker[]"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="service_quantity[]"
+                value="1"
+                min="1"
+                step="1"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="service_price[]"
+                value="0"
+                min="0"
+                step="1"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <button
+                type="button"
+                class="btn btn-sm btn-light"
+                onclick="this.closest('tr').remove()"
+            >
+                Quitar
+            </button>
+
+        </td>
+
+    `;
+
+    tbody.appendChild(
+        row
+    );
+
+}
+
+
+/* =========================================================
+   INICIALIZACIÓN
+========================================================= */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function() {
+
+        toggleCredit();
+
+    }
+);
+
+</script>
+
+{% endblock %}
