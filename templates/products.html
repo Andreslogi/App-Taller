@@ -26,12 +26,16 @@
             Limpiar
         </a>
 
-        <a
-            class="btn btn-success"
-            href="{{ url_for('product_new') }}"
-        >
-            + Producto
-        </a>
+        {% if g.user["role"] == "administrador" %}
+
+            <a
+                class="btn btn-success"
+                href="{{ url_for('product_new') }}"
+            >
+                + Producto
+            </a>
+
+        {% endif %}
 
     </form>
 
@@ -56,17 +60,34 @@
 
                 <th>Mínimo</th>
 
-                <th>Costo</th>
+
+                {% if g.user["role"] == "administrador" %}
+
+                    <th>Costo</th>
+
+                {% endif %}
+
 
                 <th>Precio venta</th>
 
-                <th>Ganancia $</th>
 
-                <th>% Ganancia</th>
+                {% if g.user["role"] == "administrador" %}
+
+                    <th>Ganancia $</th>
+
+                    <th>% Ganancia</th>
+
+                {% endif %}
+
 
                 <th>Estado</th>
 
-                <th></th>
+
+                {% if g.user["role"] == "administrador" %}
+
+                    <th></th>
+
+                {% endif %}
 
             </tr>
 
@@ -114,9 +135,13 @@
                 </td>
 
 
-                <td>
-                    {{ p.cost|money }}
-                </td>
+                {% if g.user["role"] == "administrador" %}
+
+                    <td>
+                        {{ p.cost|money }}
+                    </td>
+
+                {% endif %}
 
 
                 <td>
@@ -124,34 +149,38 @@
                 </td>
 
 
-                <td>
+                {% if g.user["role"] == "administrador" %}
 
-                    {% if p.cost and p.cost > 0 %}
+                    <td>
 
-                        {{ (p.sale_price - p.cost)|money }}
+                        {% if p.cost and p.cost > 0 %}
 
-                    {% else %}
+                            {{ (p.sale_price - p.cost)|money }}
 
-                        -
+                        {% else %}
 
-                    {% endif %}
+                            -
 
-                </td>
+                        {% endif %}
+
+                    </td>
 
 
-                <td>
+                    <td>
 
-                    {% if p.cost and p.cost > 0 %}
+                        {% if p.cost and p.cost > 0 %}
 
-                        {{ (((p.sale_price - p.cost) / p.cost) * 100)|round(1) }}%
+                            {{ (((p.sale_price - p.cost) / p.cost) * 100)|round(1) }}%
 
-                    {% else %}
+                        {% else %}
 
-                        -
+                            -
 
-                    {% endif %}
+                        {% endif %}
 
-                </td>
+                    </td>
+
+                {% endif %}
 
 
                 <td>
@@ -179,19 +208,23 @@
                 </td>
 
 
-                <td>
+                {% if g.user["role"] == "administrador" %}
 
-                    <a
-                        class="btn btn-sm btn-light"
-                        href="{{ url_for(
-                            'product_edit',
-                            product_id=p.id
-                        ) }}"
-                    >
-                        Editar
-                    </a>
+                    <td>
 
-                </td>
+                        <a
+                            class="btn btn-sm btn-light"
+                            href="{{ url_for(
+                                'product_edit',
+                                product_id=p.id
+                            ) }}"
+                        >
+                            Editar
+                        </a>
+
+                    </td>
+
+                {% endif %}
 
             </tr>
 
