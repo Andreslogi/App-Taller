@@ -478,6 +478,125 @@ def product_edit(product_id: int):
             flash(str(exc), "danger")
     return render_template("product_form.html", product=product)
 
+@app.route(
+    "/productos/<int:product_id>/eliminar",
+    methods=["POST"]
+)
+@role_required("administrador")
+def product_delete(product_id: int):
+
+    try:
+
+        with db_conn() as conn:
+
+            product = conn.execute(
+                """
+                SELECT *
+                FROM products
+                WHERE id=?
+                """,
+                (product_id,)
+            ).fetchone()
+
+            if not product:
+                raise ValueError(
+                    "Producto no encontrado."
+                )
+
+
+            invoice_usage = conn.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM invoice_items
+                WHERE product_id=?
+                """,
+                (product_id,)
+            ).fetchone()
+
+
+            movement_usage = conn.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM movements
+                WHERE product_id=?
+                """,
+                (product_id,)
+            ).fetchone()
+
+
+            has_history = (
+                int(invoice_usage["total"] or 0) > 0
+                or
+                int(movement_usage["total"] or 0) > 0
+            )
+
+
+            # ============================================
+            # PRODUCTO SIN HISTORIAL
+            # Se puede borrar completamente
+            # ============================================
+
+            if not has_history:
+
+                conn.execute(
+                    """
+                    DELETE FROM products
+                    WHERE id=?
+                    """,
+                    (product_id,)
+                )
+
+                flash(
+                    f"Producto '{product['description']}' "
+                    f"eliminado completamente.",
+                    "success"
+                )
+
+
+            # ============================================
+            # PRODUCTO CON HISTORIAL
+            # No borramos para no dañar remisiones
+            # ============================================
+
+            else:
+
+                conn.execute(
+                    """
+                    UPDATE products
+
+                    SET
+                        active=0,
+                        updated_at=CURRENT_TIMESTAMP
+
+                    WHERE id=?
+                    """,
+                    (product_id,)
+                )
+
+                flash(
+                    f"Producto '{product['description']}' "
+                    f"retirado del inventario. "
+                    f"Se conservó su historial.",
+                    "success"
+                )
+
+
+        return redirect(
+            url_for("products")
+        )
+
+
+    except ValueError as exc:
+
+        flash(
+            str(exc),
+            "danger"
+        )
+
+        return redirect(
+            url_for("products")
+        )    
+
 
 @app.route("/movimientos", methods=["GET", "POST"])
 @role_required("administrador")

@@ -1,1 +1,1896 @@
-{% extends 'base.html' %}{% set heading='Editar producto' if product else 'Nuevo producto' %}{% block content %}<form method="post" class="card"><div class="form-grid"><div class="form-group"><label>Código *</label><input name="code" required value="{{ product.code if product else '' }}"></div><div class="form-group"><label>Descripción *</label><input name="description" required value="{{ product.description if product else '' }}"></div><div class="form-group"><label>Categoría</label><input name="category" value="{{ product.category if product else '' }}"></div><div class="form-group"><label>Unidad</label><input name="unit" value="{{ product.unit if product else 'Unidad' }}"></div>{% if not product %}<div class="form-group"><label>Stock inicial</label><input name="stock" type="number" step="0.01" value="0"></div>{% endif %}<div class="form-group"><label>Stock mínimo</label><input name="min_stock" type="number" step="0.01" value="{{ product.min_stock if product else 1 }}"></div><div class="form-group"><label>Costo unitario</label><input name="cost" type="number" step="0.01" value="{{ product.cost if product else 0 }}"></div><div class="form-group"><label>Precio de venta</label><input name="sale_price" type="number" step="0.01" value="{{ product.sale_price if product else 0 }}"></div><div class="form-group full"><label>Notas</label><textarea name="notes">{{ product.notes if product else '' }}</textarea></div></div><div class="actions"><button class="btn btn-primary">Guardar</button><a class="btn btn-light" href="{{ url_for('products') }}">Cancelar</a></div></form>{% endblock %}
+{% extends 'base.html' %}
+
+{% set heading='Nueva remisión' %}
+
+{% block content %}
+
+<style>
+
+.search-picker {
+    position: relative;
+    min-width: 320px;
+}
+
+.search-picker .search-input {
+    width: 100%;
+}
+
+.search-results {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+
+    width: min(720px, 78vw);
+    max-height: 330px;
+
+    overflow-y: auto;
+
+    background: white;
+
+    border: 1px solid #cfd8e3;
+    border-radius: 10px;
+
+    box-shadow: 0 12px 30px rgba(0,0,0,.18);
+
+    z-index: 99999;
+}
+
+.search-results.open {
+    display: block;
+}
+
+.search-result {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #edf1f5;
+}
+
+.search-result:last-child {
+    border-bottom: none;
+}
+
+.search-result:hover {
+    background: #eef5fb;
+}
+
+.search-result-title {
+    font-weight: 700;
+}
+
+.search-result-meta {
+    margin-top: 3px;
+    font-size: 12px;
+    color: #667085;
+}
+
+.search-empty {
+    padding: 12px;
+    color: #667085;
+}
+
+.table-wrap,
+.card {
+    overflow: visible;
+}
+
+.product-row,
+.service-row {
+    position: relative;
+}
+
+.credit-box {
+    margin-top: 16px;
+    padding: 16px;
+
+    border: 1px solid #d9e2ec;
+    border-radius: 10px;
+
+    background: #f8fafc;
+}
+
+</style>
+
+
+<form method="post" id="invoiceForm">
+
+
+    <!-- =====================================================
+         DATOS DE LA REMISIÓN
+    ====================================================== -->
+
+    <div class="card">
+
+        <h3>
+            Datos de la remisión
+        </h3>
+
+
+        <div class="form-grid">
+
+
+            <div class="form-group">
+
+                <label>
+                    Fecha de la remisión *
+                </label>
+
+                <input
+                    type="date"
+                    name="issued_date"
+                    id="issued_date"
+                    value="{{ request.form.get('issued_date', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Cliente *
+                </label>
+
+                <input
+                    name="customer_name"
+                    value="{{ request.form.get('customer_name', 'Consumidor final') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Documento
+                </label>
+
+                <input
+                    name="customer_document"
+                    value="{{ request.form.get('customer_document', '') }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Teléfono
+                </label>
+
+                <input
+                    name="customer_phone"
+                    value="{{ request.form.get('customer_phone', '') }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Correo
+                </label>
+
+                <input
+                    type="email"
+                    name="customer_email"
+                    value="{{ request.form.get('customer_email', '') }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Dirección
+                </label>
+
+                <input
+                    name="customer_address"
+                    value="{{ request.form.get('customer_address', '') }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Placa
+                </label>
+
+                <input
+                    name="vehicle_plate"
+                    value="{{ request.form.get('vehicle_plate', '') }}"
+                    style="text-transform:uppercase;"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    ¿Quién está vendiendo? *
+                </label>
+
+                <select
+                    name="salesperson_id"
+                    required
+                >
+
+                    <option value="">
+                        Seleccionar vendedor
+                    </option>
+
+
+                    {% for seller in salespeople %}
+
+                        <option
+                            value="{{ seller.id }}"
+                            {% if request.form.get('salesperson_id') == seller.id|string %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ seller.name }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Forma de pago
+                </label>
+
+
+                {% set selected_payment =
+                    request.form.get(
+                        'payment_method',
+                        'Efectivo'
+                    )
+                %}
+
+
+                <select
+                    name="payment_method"
+                    id="payment_method"
+                    onchange="toggleCreditFields()"
+                >
+
+                    {% for method in [
+                        'Efectivo',
+                        'Transferencia',
+                        'Tarjeta',
+                        'Crédito'
+                    ] %}
+
+                        <option
+                            value="{{ method }}"
+                            {% if selected_payment == method %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ method }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             CRÉDITO
+        ================================================== -->
+
+        <div
+            id="creditFields"
+            class="credit-box"
+            style="display:none;"
+        >
+
+            <h4 style="margin-top:0;">
+                Datos del crédito
+            </h4>
+
+
+            <div class="form-grid">
+
+
+                <div class="form-group">
+
+                    <label>
+                        Fecha acordada de pago
+                    </label>
+
+                    <input
+                        type="date"
+                        name="credit_due_date"
+                        value="{{ request.form.get('credit_due_date', '') }}"
+                    >
+
+                    <div class="muted">
+                        Opcional.
+                    </div>
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Abono inicial
+                    </label>
+
+                    <input
+                        type="number"
+                        name="credit_initial_payment"
+                        min="0"
+                        step="1"
+                        value="{{ request.form.get('credit_initial_payment', '0') }}"
+                    >
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Forma de pago del abono
+                    </label>
+
+
+                    {% set initial_method =
+                        request.form.get(
+                            'credit_initial_payment_method',
+                            'Efectivo'
+                        )
+                    %}
+
+
+                    <select
+                        name="credit_initial_payment_method"
+                    >
+
+                        {% for method in [
+                            'Efectivo',
+                            'Transferencia',
+                            'Tarjeta'
+                        ] %}
+
+                            <option
+                                value="{{ method }}"
+                                {% if initial_method == method %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ method }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div
+            class="form-group"
+            style="margin-top:16px;"
+        >
+
+            <label>
+                Observaciones
+            </label>
+
+            <textarea
+                name="notes"
+                rows="3"
+            >{{ request.form.get('notes', '') }}</textarea>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         PRODUCTOS
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="actions">
+
+            <h3>
+                Productos
+            </h3>
+
+
+            <button
+                class="btn btn-success"
+                type="button"
+                onclick="addProductRow()"
+            >
+                + Agregar producto
+            </button>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th style="width:50%;">
+                            Producto
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
+                        <th>
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="productBody">
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         SERVICIOS
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="actions">
+
+            <h3>
+                Servicios
+            </h3>
+
+
+            <button
+                class="btn btn-success"
+                type="button"
+                onclick="addServiceRow()"
+            >
+                + Agregar servicio
+            </button>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th style="width:38%;">
+                            Servicio
+                        </th>
+
+                        <th>
+                            Trabajador
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
+                        <th>
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="serviceBody">
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         BOTONES
+    ====================================================== -->
+
+    <div class="card">
+
+        <div class="actions">
+
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+                Crear remisión
+            </button>
+
+
+            <a
+                class="btn btn-light"
+                href="{{ url_for('invoices') }}"
+            >
+                Cancelar
+            </a>
+
+        </div>
+
+    </div>
+
+</form>
+
+
+<script>
+
+/* =========================================================
+   DATOS
+========================================================= */
+
+const PRODUCTS = [
+
+{% for p in products %}
+
+    {
+        id: {{ p.id }},
+        code: {{ p.code|tojson }},
+        description: {{ p.description|tojson }},
+        stock: Number({{ p.stock|float }}),
+        price: Number({{ p.sale_price|float }}),
+        unit: {{ (p.unit or 'Unidad')|tojson }}
+    }
+
+    {% if not loop.last %}
+        ,
+    {% endif %}
+
+{% endfor %}
+
+];
+
+
+const SERVICES = [
+
+{% for s in services %}
+
+    {
+        id: {{ s.id }},
+        name: {{ s.name|tojson }},
+        price: Number({{ s.default_price|float }})
+    }
+
+    {% if not loop.last %}
+        ,
+    {% endif %}
+
+{% endfor %}
+
+];
+
+
+/* =========================================================
+   UTILIDADES
+========================================================= */
+
+function normalizeText(value) {
+
+    return String(value || '')
+        .normalize('NFD')
+        .replace(
+            /[\u0300-\u036f]/g,
+            ''
+        )
+        .toLowerCase();
+
+}
+
+
+function escapeHtml(value) {
+
+    const div =
+        document.createElement(
+            'div'
+        );
+
+    div.textContent =
+        String(value ?? '');
+
+    return div.innerHTML;
+
+}
+
+
+function escapeAttr(value) {
+
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+}
+
+
+function formatMoney(value) {
+
+    return (
+        '$ '
+        +
+        Number(value || 0)
+            .toLocaleString(
+                'es-CO',
+                {
+                    maximumFractionDigits: 0
+                }
+            )
+    );
+
+}
+
+
+function formatQty(value) {
+
+    const number =
+        Number(value || 0);
+
+    if (
+        Number.isInteger(
+            number
+        )
+    ) {
+
+        return String(
+            number
+        );
+    }
+
+    return String(
+        number
+    );
+
+}
+
+
+function productLabel(product) {
+
+    return (
+        product.code
+        +
+        ' - '
+        +
+        product.description
+    );
+
+}
+
+
+function findProduct(id) {
+
+    return PRODUCTS.find(
+        product =>
+            String(product.id)
+            ===
+            String(id)
+    );
+
+}
+
+
+function findService(id) {
+
+    return SERVICES.find(
+        service =>
+            String(service.id)
+            ===
+            String(id)
+    );
+
+}
+
+
+/* =========================================================
+   CERRAR LISTAS
+========================================================= */
+
+function closeAllPickers(
+    exceptPicker = null
+) {
+
+    document
+        .querySelectorAll(
+            '.search-picker'
+        )
+        .forEach(
+            picker => {
+
+                if (
+                    picker
+                    !==
+                    exceptPicker
+                ) {
+
+                    const results =
+                        picker.querySelector(
+                            '.search-results'
+                        );
+
+                    if (results) {
+
+                        results
+                            .classList
+                            .remove(
+                                'open'
+                            );
+                    }
+                }
+            }
+        );
+
+}
+
+
+/* =========================================================
+   PRODUCTOS
+========================================================= */
+
+function renderProductResults(
+    picker
+) {
+
+    const input =
+        picker.querySelector(
+            '.search-input'
+        );
+
+    const results =
+        picker.querySelector(
+            '.search-results'
+        );
+
+
+    const term =
+        normalizeText(
+            input.value.trim()
+        );
+
+
+    const matches =
+        PRODUCTS.filter(
+            product => {
+
+                const searchable =
+                    normalizeText(
+                        product.code
+                        +
+                        ' '
+                        +
+                        product.description
+                    );
+
+                return (
+                    !term
+                    ||
+                    searchable.includes(
+                        term
+                    )
+                );
+            }
+        );
+
+
+    results.innerHTML =
+        '';
+
+
+    if (
+        !matches.length
+    ) {
+
+        results.innerHTML =
+            '<div class="search-empty">'
+            +
+            'No se encontraron productos.'
+            +
+            '</div>';
+
+
+        results
+            .classList
+            .add(
+                'open'
+            );
+
+        return;
+    }
+
+
+    matches.forEach(
+        product => {
+
+            const option =
+                document.createElement(
+                    'div'
+                );
+
+
+            option.className =
+                'search-result';
+
+
+            option.innerHTML = `
+
+                <div class="search-result-title">
+
+                    ${escapeHtml(
+                        productLabel(
+                            product
+                        )
+                    )}
+
+                </div>
+
+
+                <div class="search-result-meta">
+
+                    Stock:
+                    ${formatQty(
+                        product.stock
+                    )}
+
+                    ${escapeHtml(
+                        product.unit
+                    )}
+
+                    · Precio:
+                    ${formatMoney(
+                        product.price
+                    )}
+
+                </div>
+
+            `;
+
+
+            option.addEventListener(
+                'mousedown',
+                event => {
+
+                    event.preventDefault();
+
+                    selectProduct(
+                        picker,
+                        product,
+                        false
+                    );
+                }
+            );
+
+
+            results.appendChild(
+                option
+            );
+
+        }
+    );
+
+
+    results
+        .classList
+        .add(
+            'open'
+        );
+
+}
+
+
+function selectProduct(
+    picker,
+    product,
+    preservePrice = false
+) {
+
+    const row =
+        picker.closest(
+            'tr'
+        );
+
+
+    const searchInput =
+        picker.querySelector(
+            '.search-input'
+        );
+
+
+    const hiddenInput =
+        picker.querySelector(
+            'input[name="product_id[]"]'
+        );
+
+
+    const priceInput =
+        row.querySelector(
+            'input[name="price[]"]'
+        );
+
+
+    hiddenInput.value =
+        product.id;
+
+
+    searchInput.value =
+        productLabel(
+            product
+        );
+
+
+    if (
+        !preservePrice
+        ||
+        !priceInput.value
+    ) {
+
+        priceInput.value =
+            Math.round(
+                Number(
+                    product.price
+                    ||
+                    0
+                )
+            );
+    }
+
+
+    picker
+        .querySelector(
+            '.search-results'
+        )
+        .classList
+        .remove(
+            'open'
+        );
+
+}
+
+
+function wireProductPicker(
+    picker
+) {
+
+    const input =
+        picker.querySelector(
+            '.search-input'
+        );
+
+
+    const hidden =
+        picker.querySelector(
+            'input[name="product_id[]"]'
+        );
+
+
+    input.addEventListener(
+        'focus',
+        () => {
+
+            closeAllPickers(
+                picker
+            );
+
+            renderProductResults(
+                picker
+            );
+
+        }
+    );
+
+
+    input.addEventListener(
+        'input',
+        () => {
+
+            hidden.value =
+                '';
+
+            renderProductResults(
+                picker
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   SERVICIOS
+========================================================= */
+
+function renderServiceResults(
+    picker
+) {
+
+    const input =
+        picker.querySelector(
+            '.search-input'
+        );
+
+
+    const results =
+        picker.querySelector(
+            '.search-results'
+        );
+
+
+    const term =
+        normalizeText(
+            input.value.trim()
+        );
+
+
+    const matches =
+        SERVICES.filter(
+            service => {
+
+                return (
+                    !term
+                    ||
+                    normalizeText(
+                        service.name
+                    ).includes(
+                        term
+                    )
+                );
+            }
+        );
+
+
+    results.innerHTML =
+        '';
+
+
+    if (
+        !matches.length
+    ) {
+
+        results.innerHTML =
+            '<div class="search-empty">'
+            +
+            'No se encontraron servicios.'
+            +
+            '</div>';
+
+
+        results
+            .classList
+            .add(
+                'open'
+            );
+
+        return;
+    }
+
+
+    matches.forEach(
+        service => {
+
+            const option =
+                document.createElement(
+                    'div'
+                );
+
+
+            option.className =
+                'search-result';
+
+
+            option.innerHTML = `
+
+                <div class="search-result-title">
+
+                    ${escapeHtml(
+                        service.name
+                    )}
+
+                </div>
+
+
+                <div class="search-result-meta">
+
+                    Precio:
+                    ${formatMoney(
+                        service.price
+                    )}
+
+                </div>
+
+            `;
+
+
+            option.addEventListener(
+                'mousedown',
+                event => {
+
+                    event.preventDefault();
+
+                    selectService(
+                        picker,
+                        service,
+                        false
+                    );
+
+                }
+            );
+
+
+            results.appendChild(
+                option
+            );
+
+        }
+    );
+
+
+    results
+        .classList
+        .add(
+            'open'
+        );
+
+}
+
+
+function selectService(
+    picker,
+    service,
+    preservePrice = false
+) {
+
+    const row =
+        picker.closest(
+            'tr'
+        );
+
+
+    const searchInput =
+        picker.querySelector(
+            '.search-input'
+        );
+
+
+    const hiddenInput =
+        picker.querySelector(
+            'input[name="service_id[]"]'
+        );
+
+
+    const priceInput =
+        row.querySelector(
+            'input[name="service_price[]"]'
+        );
+
+
+    hiddenInput.value =
+        service.id;
+
+
+    searchInput.value =
+        service.name;
+
+
+    if (
+        !preservePrice
+        ||
+        !priceInput.value
+    ) {
+
+        priceInput.value =
+            Math.round(
+                Number(
+                    service.price
+                    ||
+                    0
+                )
+            );
+    }
+
+
+    picker
+        .querySelector(
+            '.search-results'
+        )
+        .classList
+        .remove(
+            'open'
+        );
+
+}
+
+
+function wireServicePicker(
+    picker
+) {
+
+    const input =
+        picker.querySelector(
+            '.search-input'
+        );
+
+
+    const hidden =
+        picker.querySelector(
+            'input[name="service_id[]"]'
+        );
+
+
+    input.addEventListener(
+        'focus',
+        () => {
+
+            closeAllPickers(
+                picker
+            );
+
+            renderServiceResults(
+                picker
+            );
+
+        }
+    );
+
+
+    input.addEventListener(
+        'input',
+        () => {
+
+            hidden.value =
+                '';
+
+            renderServiceResults(
+                picker
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   AGREGAR PRODUCTO
+========================================================= */
+
+function addProductRow(
+    productId = '',
+    quantity = 1,
+    price = ''
+) {
+
+    const tbody =
+        document.getElementById(
+            'productBody'
+        );
+
+
+    const row =
+        document.createElement(
+            'tr'
+        );
+
+
+    row.className =
+        'product-row';
+
+
+    row.innerHTML = `
+
+        <td>
+
+            <div class="search-picker product-picker">
+
+                <input
+                    type="text"
+                    class="search-input"
+                    placeholder="Buscar por código o descripción..."
+                    autocomplete="off"
+                >
+
+
+                <input
+                    type="hidden"
+                    name="product_id[]"
+                    value=""
+                >
+
+
+                <div class="search-results">
+                </div>
+
+            </div>
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="quantity[]"
+                min="1"
+                step="1"
+                value="${escapeAttr(quantity)}"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="price[]"
+                min="0"
+                step="1"
+                value="${escapeAttr(price)}"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <button
+                class="btn btn-sm btn-light"
+                type="button"
+                onclick="this.closest('tr').remove()"
+            >
+                Quitar
+            </button>
+
+        </td>
+
+    `;
+
+
+    tbody.appendChild(
+        row
+    );
+
+
+    const picker =
+        row.querySelector(
+            '.product-picker'
+        );
+
+
+    wireProductPicker(
+        picker
+    );
+
+
+    if (
+        productId
+    ) {
+
+        const product =
+            findProduct(
+                productId
+            );
+
+
+        if (
+            product
+        ) {
+
+            selectProduct(
+                picker,
+                product,
+                true
+            );
+        }
+    }
+
+}
+
+
+/* =========================================================
+   AGREGAR SERVICIO
+========================================================= */
+
+function addServiceRow(
+    serviceId = '',
+    worker = '',
+    quantity = 1,
+    price = ''
+) {
+
+    const tbody =
+        document.getElementById(
+            'serviceBody'
+        );
+
+
+    const row =
+        document.createElement(
+            'tr'
+        );
+
+
+    row.className =
+        'service-row';
+
+
+    row.innerHTML = `
+
+        <td>
+
+            <div class="search-picker service-picker">
+
+                <input
+                    type="text"
+                    class="search-input"
+                    placeholder="Buscar servicio..."
+                    autocomplete="off"
+                >
+
+
+                <input
+                    type="hidden"
+                    name="service_id[]"
+                    value=""
+                >
+
+
+                <div class="search-results">
+                </div>
+
+            </div>
+
+        </td>
+
+
+        <td>
+
+            <input
+                name="service_worker[]"
+                value="${escapeAttr(worker)}"
+                placeholder="Trabajador"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="service_quantity[]"
+                min="1"
+                step="1"
+                value="${escapeAttr(quantity)}"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <input
+                type="number"
+                name="service_price[]"
+                min="0"
+                step="1"
+                value="${escapeAttr(price)}"
+                required
+            >
+
+        </td>
+
+
+        <td>
+
+            <button
+                class="btn btn-sm btn-light"
+                type="button"
+                onclick="this.closest('tr').remove()"
+            >
+                Quitar
+            </button>
+
+        </td>
+
+    `;
+
+
+    tbody.appendChild(
+        row
+    );
+
+
+    const picker =
+        row.querySelector(
+            '.service-picker'
+        );
+
+
+    wireServicePicker(
+        picker
+    );
+
+
+    if (
+        serviceId
+    ) {
+
+        const service =
+            findService(
+                serviceId
+            );
+
+
+        if (
+            service
+        ) {
+
+            selectService(
+                picker,
+                service,
+                true
+            );
+        }
+    }
+
+}
+
+
+/* =========================================================
+   VALIDACIÓN
+========================================================= */
+
+function validateSelections(
+    event
+) {
+
+    const invalidProduct =
+        [
+            ...document.querySelectorAll(
+                '.product-row'
+            )
+        ]
+        .find(
+            row => {
+
+                return !row
+                    .querySelector(
+                        'input[name="product_id[]"]'
+                    )
+                    .value;
+            }
+        );
+
+
+    if (
+        invalidProduct
+    ) {
+
+        event.preventDefault();
+
+
+        alert(
+            'Selecciona un producto válido de la lista.'
+        );
+
+
+        invalidProduct
+            .querySelector(
+                '.search-input'
+            )
+            .focus();
+
+
+        return false;
+    }
+
+
+    const invalidService =
+        [
+            ...document.querySelectorAll(
+                '.service-row'
+            )
+        ]
+        .find(
+            row => {
+
+                return !row
+                    .querySelector(
+                        'input[name="service_id[]"]'
+                    )
+                    .value;
+            }
+        );
+
+
+    if (
+        invalidService
+    ) {
+
+        event.preventDefault();
+
+
+        alert(
+            'Selecciona un servicio válido de la lista.'
+        );
+
+
+        invalidService
+            .querySelector(
+                '.search-input'
+            )
+            .focus();
+
+
+        return false;
+    }
+
+
+    return true;
+
+}
+
+
+/* =========================================================
+   CRÉDITO
+========================================================= */
+
+function toggleCreditFields() {
+
+    const payment =
+        document.getElementById(
+            'payment_method'
+        );
+
+
+    const fields =
+        document.getElementById(
+            'creditFields'
+        );
+
+
+    if (
+        !payment
+        ||
+        !fields
+    ) {
+
+        return;
+    }
+
+
+    fields.style.display =
+        payment.value === 'Crédito'
+            ?
+            'block'
+            :
+            'none';
+
+}
+
+
+/* =========================================================
+   FECHA
+========================================================= */
+
+function setDefaultDate() {
+
+    const input =
+        document.getElementById(
+            'issued_date'
+        );
+
+
+    if (
+        !input
+        ||
+        input.value
+    ) {
+
+        return;
+    }
+
+
+    const now =
+        new Date();
+
+
+    const localDate =
+        new Date(
+            now.getTime()
+            -
+            now.getTimezoneOffset()
+            *
+            60000
+        );
+
+
+    input.value =
+        localDate
+            .toISOString()
+            .slice(
+                0,
+                10
+            );
+
+}
+
+
+/* =========================================================
+   INICIO
+========================================================= */
+
+document.addEventListener(
+    'click',
+    event => {
+
+        if (
+            !event.target.closest(
+                '.search-picker'
+            )
+        ) {
+
+            closeAllPickers();
+        }
+
+    }
+);
+
+
+document.addEventListener(
+    'DOMContentLoaded',
+    () => {
+
+        setDefaultDate();
+
+        toggleCreditFields();
+
+
+        const productIds =
+            {{ request.form.getlist('product_id[]')|tojson }};
+
+
+        const productQuantities =
+            {{ request.form.getlist('quantity[]')|tojson }};
+
+
+        const productPrices =
+            {{ request.form.getlist('price[]')|tojson }};
+
+
+        productIds.forEach(
+            (id, index) => {
+
+                if (
+                    String(id).trim()
+                ) {
+
+                    addProductRow(
+                        id,
+                        productQuantities[index]
+                        ||
+                        1,
+                        productPrices[index]
+                        ||
+                        ''
+                    );
+                }
+
+            }
+        );
+
+
+        const serviceIds =
+            {{ request.form.getlist('service_id[]')|tojson }};
+
+
+        const serviceWorkers =
+            {{ request.form.getlist('service_worker[]')|tojson }};
+
+
+        const serviceQuantities =
+            {{ request.form.getlist('service_quantity[]')|tojson }};
+
+
+        const servicePrices =
+            {{ request.form.getlist('service_price[]')|tojson }};
+
+
+        serviceIds.forEach(
+            (id, index) => {
+
+                if (
+                    String(id).trim()
+                ) {
+
+                    addServiceRow(
+                        id,
+                        serviceWorkers[index]
+                        ||
+                        '',
+                        serviceQuantities[index]
+                        ||
+                        1,
+                        servicePrices[index]
+                        ||
+                        ''
+                    );
+                }
+
+            }
+        );
+
+
+        document
+            .getElementById(
+                'invoiceForm'
+            )
+            .addEventListener(
+                'submit',
+                validateSelections
+            );
+
+    }
+);
+
+</script>
+
+{% endblock %}

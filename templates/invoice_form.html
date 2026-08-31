@@ -1,104 +1,317 @@
 {% extends 'base.html' %}
-{% set heading = 'Nueva remisión' %}
+
+{% set heading='Nueva remisión' %}
 
 {% block content %}
 
-<form method="post" id="invoiceForm">
+<style>
 
-    <!-- =====================================================
-         DATOS DEL CLIENTE
-    ====================================================== -->
+.search-picker {
+    position: relative;
+    min-width: 320px;
+}
+
+.search-picker input {
+    width: 100%;
+}
+
+.search-results {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+
+    width: min(720px, 78vw);
+    max-height: 330px;
+
+    overflow-y: auto;
+
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+
+    z-index: 99999;
+}
+
+.search-results.open {
+    display: block;
+}
+
+.search-result {
+    padding: 11px 13px;
+    cursor: pointer;
+    border-bottom: 1px solid #edf1f5;
+}
+
+.search-result:hover {
+    background: #eef5fb;
+}
+
+.search-result:last-child {
+    border-bottom: none;
+}
+
+.search-result-title {
+    font-weight: 700;
+}
+
+.search-result-meta {
+    font-size: 12px;
+    color: #667085;
+    margin-top: 3px;
+}
+
+.search-empty {
+    padding: 12px;
+    color: #667085;
+}
+
+.table-wrap,
+.card {
+    overflow: visible;
+}
+
+.product-row,
+.service-row {
+    position: relative;
+}
+
+.credit-box {
+    margin-top: 16px;
+    padding: 16px;
+
+    border: 1px solid #d9e2ec;
+    border-radius: 10px;
+
+    background: #f8fafc;
+}
+
+</style>
+
+
+<!-- ======================================================
+     CATÁLOGOS OCULTOS
+     JavaScript leerá estos datos
+======================================================= -->
+
+<div id="productCatalog" style="display:none;">
+
+    {% for p in products %}
+
+        <div
+            class="catalog-product"
+            data-id="{{ p.id }}"
+            data-code="{{ p.code }}"
+            data-description="{{ p.description }}"
+            data-stock="{{ p.stock }}"
+            data-price="{{ p.sale_price }}"
+            data-unit="{{ p.unit or 'Unidad' }}"
+        ></div>
+
+    {% endfor %}
+
+</div>
+
+
+<div id="serviceCatalog" style="display:none;">
+
+    {% for s in services %}
+
+        <div
+            class="catalog-service"
+            data-id="{{ s.id }}"
+            data-name="{{ s.name }}"
+            data-price="{{ s.default_price }}"
+        ></div>
+
+    {% endfor %}
+
+</div>
+
+
+<!-- Datos enviados previamente si hubo error -->
+
+<textarea
+    id="postedProductIds"
+    style="display:none;"
+>{{ request.form.getlist('product_id[]')|tojson }}</textarea>
+
+<textarea
+    id="postedProductQuantities"
+    style="display:none;"
+>{{ request.form.getlist('quantity[]')|tojson }}</textarea>
+
+<textarea
+    id="postedProductPrices"
+    style="display:none;"
+>{{ request.form.getlist('price[]')|tojson }}</textarea>
+
+<textarea
+    id="postedServiceIds"
+    style="display:none;"
+>{{ request.form.getlist('service_id[]')|tojson }}</textarea>
+
+<textarea
+    id="postedServiceWorkers"
+    style="display:none;"
+>{{ request.form.getlist('service_worker[]')|tojson }}</textarea>
+
+<textarea
+    id="postedServiceQuantities"
+    style="display:none;"
+>{{ request.form.getlist('service_quantity[]')|tojson }}</textarea>
+
+<textarea
+    id="postedServicePrices"
+    style="display:none;"
+>{{ request.form.getlist('service_price[]')|tojson }}</textarea>
+
+
+<form
+    method="post"
+    id="invoiceForm"
+>
+
+    <!-- ==================================================
+         DATOS GENERALES
+    =================================================== -->
 
     <div class="card">
 
-        <h3>Datos del cliente</h3>
+        <h3>
+            Datos de la remisión
+        </h3>
+
 
         <div class="form-grid">
 
+
             <div class="form-group">
-                <label>Nombre</label>
+
+                <label>
+                    Fecha de la remisión *
+                </label>
+
+                <input
+                    type="date"
+                    name="issued_date"
+                    id="issued_date"
+                    value="{{ request.form.get('issued_date', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Cliente *
+                </label>
 
                 <input
                     name="customer_name"
                     value="{{ request.form.get('customer_name', 'Consumidor final') }}"
+                    required
                 >
+
             </div>
 
+
             <div class="form-group">
-                <label>Documento</label>
+
+                <label>
+                    Documento
+                </label>
 
                 <input
                     name="customer_document"
                     value="{{ request.form.get('customer_document', '') }}"
                 >
+
             </div>
 
+
             <div class="form-group">
-                <label>Teléfono</label>
+
+                <label>
+                    Teléfono
+                </label>
 
                 <input
                     name="customer_phone"
                     value="{{ request.form.get('customer_phone', '') }}"
                 >
+
             </div>
 
+
             <div class="form-group">
-                <label>Correo</label>
+
+                <label>
+                    Correo
+                </label>
 
                 <input
-                    name="customer_email"
                     type="email"
+                    name="customer_email"
                     value="{{ request.form.get('customer_email', '') }}"
                 >
+
             </div>
 
+
             <div class="form-group">
-                <label>Dirección</label>
+
+                <label>
+                    Dirección
+                </label>
 
                 <input
                     name="customer_address"
                     value="{{ request.form.get('customer_address', '') }}"
                 >
+
             </div>
 
+
             <div class="form-group">
-                <label>Placa del vehículo</label>
+
+                <label>
+                    Placa
+                </label>
 
                 <input
                     name="vehicle_plate"
-                    maxlength="10"
-                    placeholder="Ej: ABC123"
-                    style="text-transform: uppercase;"
                     value="{{ request.form.get('vehicle_plate', '') }}"
-                    oninput="this.value = this.value.toUpperCase()"
+                    style="text-transform: uppercase;"
                 >
+
             </div>
 
-            <div class="form-group">
-                <label>Fecha de la remisión</label>
 
-                <input
-                    type="date"
-                    name="issued_date"
-                    value="{{ request.form.get('issued_date', '') }}"
+            <div class="form-group">
+
+                <label>
+                    ¿Quién está vendiendo? *
+                </label>
+
+                <select
+                    name="salesperson_id"
                     required
                 >
-            </div>
-            <div class="form-group">
-
-                <label>¿Quién está vendiendo? *</label>
-
-                <select name="salesperson_id">
 
                     <option value="">
-                        Seleccione vendedor...
+                        Seleccionar vendedor
                     </option>
 
                     {% for seller in salespeople %}
 
                         <option
                             value="{{ seller.id }}"
-                            {% if request.form.get('salesperson_id', '') == seller.id|string %}
+                            {% if request.form.get('salesperson_id') == seller.id|string %}
                                 selected
                             {% endif %}
                         >
@@ -109,50 +322,184 @@
 
                 </select>
 
-                <div class="muted">
-                    Identifica al vendedor real aunque se use el usuario genérico "vendedor".
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Forma de pago
+                </label>
+
+                {% set payment =
+                    request.form.get(
+                        'payment_method',
+                        'Efectivo'
+                    )
+                %}
+
+                <select
+                    name="payment_method"
+                    id="payment_method"
+                    onchange="toggleCreditFields()"
+                >
+
+                    {% for method in [
+                        'Efectivo',
+                        'Transferencia',
+                        'Tarjeta',
+                        'Crédito'
+                    ] %}
+
+                        <option
+                            value="{{ method }}"
+                            {% if payment == method %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ method }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <!-- ==============================================
+             CRÉDITO
+        =============================================== -->
+
+        <div
+            id="creditFields"
+            class="credit-box"
+            style="display:none;"
+        >
+
+            <h4 style="margin-top:0;">
+                Datos del crédito
+            </h4>
+
+
+            <div class="form-grid">
+
+
+                <div class="form-group">
+
+                    <label>
+                        Fecha acordada de pago
+                    </label>
+
+                    <input
+                        type="date"
+                        name="credit_due_date"
+                        value="{{ request.form.get('credit_due_date', '') }}"
+                    >
+
+                    <div class="muted">
+                        Opcional
+                    </div>
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Abono inicial
+                    </label>
+
+                    <input
+                        type="number"
+                        name="credit_initial_payment"
+                        min="0"
+                        step="1"
+                        value="{{ request.form.get('credit_initial_payment', '0') }}"
+                    >
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Forma de pago del abono
+                    </label>
+
+                    {% set initial_method =
+                        request.form.get(
+                            'credit_initial_payment_method',
+                            'Efectivo'
+                        )
+                    %}
+
+                    <select
+                        name="credit_initial_payment_method"
+                    >
+
+                        {% for method in [
+                            'Efectivo',
+                            'Transferencia',
+                            'Tarjeta'
+                        ] %}
+
+                            <option
+                                value="{{ method }}"
+                                {% if initial_method == method %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ method }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
                 </div>
 
             </div>
 
         </div>
 
+
+        <div
+            class="form-group"
+            style="margin-top:16px;"
+        >
+
+            <label>
+                Observaciones
+            </label>
+
+            <textarea
+                name="notes"
+                rows="3"
+            >{{ request.form.get('notes', '') }}</textarea>
+
+        </div>
+
     </div>
 
 
-    <!-- =====================================================
+    <!-- ==================================================
          PRODUCTOS
-    ====================================================== -->
+    =================================================== -->
 
-    <div
-        class="card"
-        style="
-            overflow: visible;
-            position: relative;
-            z-index: 20;
-        "
-    >
+    <div class="card">
 
-        <div
-            class="actions"
-            style="justify-content: space-between;"
-        >
+        <div class="actions">
 
-            <div>
-
-                <h3 style="margin-bottom: 5px;">
-                    Productos
-                </h3>
-
-                <div class="muted">
-                    Los productos vendidos descuentan automáticamente el inventario.
-                </div>
-
-            </div>
+            <h3>
+                Productos
+            </h3>
 
             <button
-                class="btn btn-light"
                 type="button"
+                class="btn btn-success"
                 onclick="addProductRow()"
             >
                 + Agregar producto
@@ -161,36 +508,35 @@
         </div>
 
 
-        <div
-            class="table-wrap"
-            style="
-                overflow: visible;
-                position: relative;
-            "
-        >
+        <div class="table-wrap">
 
-            <table
-                class="table invoice-items"
-                style="
-                    position: relative;
-                    overflow: visible;
-                "
-            >
+            <table class="table">
 
                 <thead>
 
                     <tr>
-                        <th style="width: 42%;">Producto</th>
-                        <th style="width: 10%;">Disponible</th>
-                        <th style="width: 12%;">Cantidad</th>
-                        <th style="width: 14%;">Precio unitario</th>
-                        <th style="width: 14%;">Total</th>
-                        <th style="width: 8%;"></th>
+
+                        <th style="width:50%;">
+                            Producto
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
+                        <th></th>
+
                     </tr>
 
                 </thead>
 
-                <tbody id="productsBody"></tbody>
+
+                <tbody id="productBody">
+                </tbody>
 
             </table>
 
@@ -199,32 +545,21 @@
     </div>
 
 
-    <!-- =====================================================
+    <!-- ==================================================
          SERVICIOS
-    ====================================================== -->
+    =================================================== -->
 
     <div class="card">
 
-        <div
-            class="actions"
-            style="justify-content: space-between;"
-        >
+        <div class="actions">
 
-            <div>
-
-                <h3 style="margin-bottom: 5px;">
-                    Servicios
-                </h3>
-
-                <div class="muted">
-                    Cada servicio distribuye automáticamente 70% para el trabajador y 30% para el negocio.
-                </div>
-
-            </div>
+            <h3>
+                Servicios
+            </h3>
 
             <button
-                class="btn btn-light"
                 type="button"
+                class="btn btn-success"
                 onclick="addServiceRow()"
             >
                 + Agregar servicio
@@ -235,24 +570,37 @@
 
         <div class="table-wrap">
 
-            <table class="table invoice-items">
+            <table class="table">
 
                 <thead>
 
                     <tr>
-                        <th>Servicio</th>
-                        <th>Trabajador</th>
-                        <th>Cantidad</th>
-                        <th>Valor</th>
-                        <th>Total</th>
-                        <th>Trabajador 70%</th>
-                        <th>Negocio 30%</th>
+
+                        <th style="width:38%;">
+                            Servicio
+                        </th>
+
+                        <th>
+                            Trabajador
+                        </th>
+
+                        <th>
+                            Cantidad
+                        </th>
+
+                        <th>
+                            Precio
+                        </th>
+
                         <th></th>
+
                     </tr>
 
                 </thead>
 
-                <tbody id="servicesBody"></tbody>
+
+                <tbody id="serviceBody">
+                </tbody>
 
             </table>
 
@@ -261,823 +609,175 @@
     </div>
 
 
-    <!-- =====================================================
-         TOTALES
-    ====================================================== -->
-
     <div class="card">
 
-        <div class="totals">
+        <div class="actions">
 
-            <div class="row">
-                <span>Subtotal</span>
-                <strong id="subtotal">$ 0</strong>
-            </div>
-
-            <div class="row">
-                <span>Impuesto ({{ settings.tax_rate }}%)</span>
-                <strong id="tax">$ 0</strong>
-            </div>
-
-            <div class="row grand">
-                <span>Total remisión</span>
-                <span id="total">$ 0</span>
-            </div>
-
-        </div>
-
-
-        <hr
-            style="
-                border: 0;
-                border-top: 1px solid #d8e0ea;
-                margin: 18px 0;
-            "
-        >
-
-
-        <div class="grid grid-2">
-
-            <div>
-
-                <div class="muted">
-                    Total servicios para trabajadores
-                </div>
-
-                <div
-                    style="
-                        font-size: 20px;
-                        font-weight: 700;
-                    "
-                    id="workerTotal"
-                >
-                    $ 0
-                </div>
-
-            </div>
-
-            <div>
-
-                <div class="muted">
-                    Total servicios para el negocio
-                </div>
-
-                <div
-                    style="
-                        font-size: 20px;
-                        font-weight: 700;
-                    "
-                    id="businessTotal"
-                >
-                    $ 0
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- =====================================================
-         PAGO
-    ====================================================== -->
-
-    <div class="card">
-
-        <div class="form-grid">
-
-            <div class="form-group">
-
-                <label>Forma de pago</label>
-
-                {% set payment = request.form.get(
-                    'payment_method',
-                    'Efectivo'
-                ) %}
-
-                <select name="payment_method" id="payment_method" onchange="toggleCreditFields()">
-
-                    <option
-                        value="Efectivo"
-                        {% if payment == 'Efectivo' %}
-                            selected
-                        {% endif %}
-                    >
-                        Efectivo
-                    </option>
-
-                    <option
-                        value="Transferencia"
-                        {% if payment == 'Transferencia' %}
-                            selected
-                        {% endif %}
-                    >
-                        Transferencia
-                    </option>
-
-                    <option
-                        value="Tarjeta"
-                        {% if payment == 'Tarjeta' %}
-                            selected
-                        {% endif %}
-                    >
-                        Tarjeta
-                    </option>
-
-                    <option
-                        value="Crédito"
-                        {% if payment == 'Crédito' %}
-                            selected
-                        {% endif %}
-                    >
-                        Crédito
-                    </option>
-
-                </select>
-
-            </div>
-
-            <div
-                id="creditFields"
-                style="display:none; grid-column: 1 / -1; padding:16px; border:1px solid #d8e0ea; border-radius:10px; background:#f8fafc;"
+            <button
+                type="submit"
+                class="btn btn-primary"
             >
-                <div style="font-weight:700; margin-bottom:10px;">Datos del crédito</div>
+                Crear remisión
+            </button>
 
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Fecha acordada de pago</label>
-                        <input
-                            type="date"
-                            name="credit_due_date"
-                            value="{{ request.form.get('credit_due_date', '') }}"
-                        >
-                        <div class="muted">Opcional. Puede quedar sin fecha acordada.</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Abono inicial</label>
-                        <input
-                            type="number"
-                            name="credit_initial_payment"
-                            id="credit_initial_payment"
-                            min="0"
-                            step="0.01"
-                            value="{{ request.form.get('credit_initial_payment', '0') }}"
-                        >
-                        <div class="muted">Déjalo en 0 si el cliente no hizo abono.</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Forma del abono inicial</label>
-                        {% set initial_method = request.form.get('credit_initial_payment_method', 'Efectivo') %}
-                        <select name="credit_initial_payment_method">
-                            <option value="Efectivo" {% if initial_method == 'Efectivo' %}selected{% endif %}>Efectivo</option>
-                            <option value="Transferencia" {% if initial_method == 'Transferencia' %}selected{% endif %}>Transferencia</option>
-                            <option value="Tarjeta" {% if initial_method == 'Tarjeta' %}selected{% endif %}>Tarjeta</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-
-            <div class="form-group">
-
-                <label>Observaciones</label>
-
-                <input
-                    name="notes"
-                    value="{{ request.form.get('notes', '') }}"
-                >
-
-            </div>
+            <a
+                class="btn btn-light"
+                href="{{ url_for('invoices') }}"
+            >
+                Cancelar
+            </a>
 
         </div>
-
-
-        <button
-            class="btn btn-success"
-            type="submit"
-        >
-            Generar remisión
-        </button>
 
     </div>
 
 </form>
 
 
-<!-- =========================================================
-     CONFIGURACIÓN
-========================================================= -->
-
-<div
-    id="invoiceConfiguration"
-    data-tax-rate="{{ settings.tax_rate or 0 }}"
-    style="display: none;"
-></div>
-
-
-<!-- =========================================================
-     PRODUCTOS ANTERIORES
-========================================================= -->
-
-<div
-    id="previousProducts"
-    style="display: none;"
->
-
-    {% for product_id in request.form.getlist('product_id[]') %}
-
-        {% set index = loop.index0 %}
-
-        <div
-            class="previous-product"
-            data-id="{{ product_id }}"
-            data-quantity="{{ request.form.getlist('quantity[]')[index] if index < request.form.getlist('quantity[]')|length else '1' }}"
-            data-price="{{ request.form.getlist('price[]')[index] if index < request.form.getlist('price[]')|length else '0' }}"
-        ></div>
-
-    {% endfor %}
-
-</div>
-
-
-<!-- =========================================================
-     SERVICIOS ANTERIORES
-========================================================= -->
-
-<div
-    id="previousServices"
-    style="display: none;"
->
-
-    {% for service_id in request.form.getlist('service_id[]') %}
-
-        {% set index = loop.index0 %}
-
-        <div
-            class="previous-service"
-            data-id="{{ service_id }}"
-            data-worker="{{ request.form.getlist('service_worker[]')[index] if index < request.form.getlist('service_worker[]')|length else '' }}"
-            data-quantity="{{ request.form.getlist('service_quantity[]')[index] if index < request.form.getlist('service_quantity[]')|length else '1' }}"
-            data-price="{{ request.form.getlist('service_price[]')[index] if index < request.form.getlist('service_price[]')|length else '0' }}"
-        ></div>
-
-    {% endfor %}
-
-</div>
-
-
-<!-- =========================================================
-     TEMPLATE PRODUCTO
-========================================================= -->
-
-<template id="productTemplate">
-
-    <tr>
-
-        <!-- PRODUCTO -->
-        <td
-            style="
-                min-width: 480px;
-                position: relative;
-                overflow: visible;
-            "
-        >
-
-            <div
-                class="product-combobox"
-                style="
-                    position: relative;
-                    width: 100%;
-                    overflow: visible;
-                "
-            >
-
-                <input
-                    type="text"
-                    class="product-search"
-                    placeholder="Buscar repuesto..."
-                    autocomplete="off"
-                    onfocus="openProductList(this)"
-                    onclick="openProductList(this)"
-                    oninput="searchProduct(this)"
-                    style="
-                        width: 100%;
-                        box-sizing: border-box;
-                    "
-                >
-
-                <input
-                    type="hidden"
-                    name="product_id[]"
-                    class="product-id"
-                >
-
-
-                <div
-                    class="product-results"
-                    style="
-                        display: none;
-
-                        position: absolute;
-
-                        top: calc(100% + 4px);
-                        left: 0;
-
-                        width: 620px;
-
-                        max-height: 560px;
-
-                        overflow-y: auto;
-                        overflow-x: hidden;
-
-                        background: #ffffff;
-
-                        border: 1px solid #cbd5e1;
-                        border-radius: 8px;
-
-                        z-index: 9999999;
-
-                        box-shadow:
-                            0 12px 30px
-                            rgba(0,0,0,0.18);
-                    "
-                >
-
-                    {% for p in products %}
-
-                        <div
-                            class="product-option"
-
-                            data-id="{{ p.id }}"
-                            data-stock="{{ p.stock }}"
-                            data-price="{{ p.sale_price }}"
-
-                            data-name="{{ p.code }} - {{ p.description }}"
-
-                            data-search="{{ (p.code ~ ' ' ~ p.description)|lower }}"
-
-                            onmousedown="selectProduct(this)"
-
-                            style="
-                                padding: 10px 14px;
-
-                                cursor: pointer;
-
-                                border-bottom:
-                                    1px solid #edf2f7;
-
-                                background: #ffffff;
-                            "
-                        >
-
-                            <div
-                                style="
-                                    font-weight: 600;
-                                    color: #172033;
-                                "
-                            >
-                                {{ p.code }} - {{ p.description }}
-                            </div>
-
-                            <div
-                                style="
-                                    font-size: 12px;
-                                    color: #64748b;
-                                    margin-top: 3px;
-                                "
-                            >
-                                Stock:
-                                {{ p.stock }}
-
-                                |
-
-                                Precio:
-                                {{ p.sale_price|money }}
-                            </div>
-
-                        </div>
-
-                    {% endfor %}
-
-                </div>
-
-            </div>
-
-        </td>
-
-
-        <!-- STOCK -->
-        <td class="stock">
-            -
-        </td>
-
-
-        <!-- CANTIDAD -->
-        <td>
-
-            <input
-                name="quantity[]"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value="1"
-                oninput="calculate()"
-            >
-
-        </td>
-
-
-        <!-- PRECIO -->
-        <td>
-
-            <input
-                name="price[]"
-                type="number"
-                min="0"
-                step="0.01"
-                value="0"
-                oninput="calculate()"
-            >
-
-        </td>
-
-
-        <!-- TOTAL -->
-        <td class="line-total">
-            $ 0
-        </td>
-
-
-        <!-- ELIMINAR -->
-        <td>
-
-            <button
-                type="button"
-                class="btn btn-sm btn-danger"
-                onclick="
-                    this.closest('tr').remove();
-                    calculate();
-                "
-            >
-                X
-            </button>
-
-        </td>
-
-    </tr>
-
-</template>
-
-
-<!-- =========================================================
-     TEMPLATE SERVICIO
-========================================================= -->
-
-<template id="serviceTemplate">
-
-    <tr>
-
-        <td>
-
-            <select
-                name="service_id[]"
-                onchange="serviceChanged(this)"
-            >
-
-                <option value="">
-                    Seleccione...
-                </option>
-
-                {% for s in services %}
-
-                    <option
-                        value="{{ s.id }}"
-                        data-price="{{ s.default_price }}"
-                    >
-                        {{ s.name }}
-                    </option>
-
-                {% endfor %}
-
-            </select>
-
-        </td>
-
-
-        <td>
-
-            <input
-                name="service_worker[]"
-                placeholder="Nombre del trabajador"
-            >
-
-        </td>
-
-
-        <td>
-
-            <input
-                name="service_quantity[]"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value="1"
-                oninput="calculate()"
-            >
-
-        </td>
-
-
-        <td>
-
-            <input
-                name="service_price[]"
-                type="number"
-                min="0"
-                step="0.01"
-                value="0"
-                oninput="calculate()"
-            >
-
-        </td>
-
-
-        <td class="service-line-total">
-            $ 0
-        </td>
-
-
-        <td class="worker-share">
-            $ 0
-        </td>
-
-
-        <td class="business-share">
-            $ 0
-        </td>
-
-
-        <td>
-
-            <button
-                type="button"
-                class="btn btn-sm btn-danger"
-                onclick="
-                    this.closest('tr').remove();
-                    calculate();
-                "
-            >
-                X
-            </button>
-
-        </td>
-
-    </tr>
-
-</template>
-
-{% endblock %}
-
-
-{% block scripts %}
-
 <script>
 
 /* =========================================================
-   CONFIGURACIÓN
+   CARGAR CATÁLOGOS DESDE HTML
 ========================================================= */
 
-const configuration =
-    document.getElementById(
-        "invoiceConfiguration"
-    );
-
-const taxRate =
-    parseFloat(
-        configuration.dataset.taxRate
-    ) || 0;
-
-
-/* =========================================================
-   MONEDA
-========================================================= */
-
-function money(value) {
-
-    return "$ " +
-        Math.round(value)
-            .toLocaleString("es-CO");
-
-}
-
-
-/* =========================================================
-   ABRIR LISTA DE PRODUCTOS
-========================================================= */
-
-function openProductList(input) {
-
-    closeAllProductLists(
-        input.closest(".product-combobox")
+const PRODUCTS =
+    Array.from(
+        document.querySelectorAll(
+            '.catalog-product'
+        )
+    )
+    .map(
+        element => ({
+            id: element.dataset.id,
+            code: element.dataset.code || '',
+            description: element.dataset.description || '',
+            stock: Number(
+                element.dataset.stock || 0
+            ),
+            price: Number(
+                element.dataset.price || 0
+            ),
+            unit:
+                element.dataset.unit
+                ||
+                'Unidad'
+        })
     );
 
 
-    const container =
-        input.closest(
-            ".product-combobox"
-        );
+const SERVICES =
+    Array.from(
+        document.querySelectorAll(
+            '.catalog-service'
+        )
+    )
+    .map(
+        element => ({
+            id: element.dataset.id,
+            name: element.dataset.name || '',
+            price: Number(
+                element.dataset.price || 0
+            )
+        })
+    );
 
 
-    const results =
-        container.querySelector(
-            ".product-results"
-        );
+/* =========================================================
+   UTILIDADES
+========================================================= */
 
+function normalizeText(value) {
 
-    const options =
-        results.querySelectorAll(
-            ".product-option"
-        );
-
-
-    const search =
-        input.value
-            .toLowerCase()
-            .trim();
-
-
-    options.forEach(option => {
-
-        const text =
-            option.dataset.search || "";
-
-
-        const show =
-            search === ""
-            ||
-            text.includes(search);
-
-
-        option.style.display =
-            show
-                ? "block"
-                : "none";
-
-    });
-
-
-    results.style.display =
-        "block";
+    return String(value || '')
+        .normalize('NFD')
+        .replace(
+            /[\u0300-\u036f]/g,
+            ''
+        )
+        .toLowerCase();
 
 }
 
 
-/* =========================================================
-   BUSCAR PRODUCTO
-========================================================= */
+function escapeHtml(value) {
 
-function searchProduct(input) {
-
-    const container =
-        input.closest(
-            ".product-combobox"
+    const div =
+        document.createElement(
+            'div'
         );
 
+    div.textContent =
+        String(value ?? '');
 
-    const results =
-        container.querySelector(
-            ".product-results"
-        );
-
-
-    const options =
-        results.querySelectorAll(
-            ".product-option"
-        );
-
-
-    const search =
-        input.value
-            .toLowerCase()
-            .trim();
-
-
-    /*
-        Al escribir nuevamente,
-        quitamos la selección previa
-    */
-
-    container
-        .querySelector(
-            ".product-id"
-        )
-        .value = "";
-
-
-    let visibleCount = 0;
-
-
-    options.forEach(option => {
-
-        const text =
-            option.dataset.search || "";
-
-
-        const matches =
-            search === ""
-            ||
-            text.includes(search);
-
-
-        option.style.display =
-            matches
-                ? "block"
-                : "none";
-
-
-        if (matches) {
-
-            visibleCount++;
-
-        }
-
-    });
-
-
-    results.style.display =
-        visibleCount > 0
-            ? "block"
-            : "none";
+    return div.innerHTML;
 
 }
 
 
-/* =========================================================
-   SELECCIONAR PRODUCTO
-========================================================= */
+function formatMoney(value) {
 
-function selectProduct(option) {
+    return (
+        '$ '
+        +
+        Number(value || 0)
+            .toLocaleString(
+                'es-CO',
+                {
+                    maximumFractionDigits: 0
+                }
+            )
+    );
 
-    const container =
-        option.closest(
-            ".product-combobox"
-        );
-
-
-    const row =
-        option.closest("tr");
-
-
-    const searchInput =
-        container.querySelector(
-            ".product-search"
-        );
+}
 
 
-    const productId =
-        container.querySelector(
-            ".product-id"
-        );
+function formatQuantity(value) {
+
+    const number =
+        Number(value || 0);
+
+    return Number.isInteger(number)
+        ?
+        String(number)
+        :
+        String(number);
+
+}
 
 
-    const results =
-        container.querySelector(
-            ".product-results"
-        );
+function findProduct(id) {
+
+    return PRODUCTS.find(
+        product =>
+            String(product.id)
+            ===
+            String(id)
+    );
+
+}
 
 
-    searchInput.value =
-        option.dataset.name;
+function findService(id) {
+
+    return SERVICES.find(
+        service =>
+            String(service.id)
+            ===
+            String(id)
+    );
+
+}
 
 
-    productId.value =
-        option.dataset.id;
+function productLabel(product) {
 
-
-    row
-        .querySelector(
-            ".stock"
-        )
-        .textContent =
-            option.dataset.stock || "-";
-
-
-    row
-        .querySelector(
-            '[name="price[]"]'
-        )
-        .value =
-            option.dataset.price || 0;
-
-
-    results.style.display =
-        "none";
-
-
-    calculate();
+    return (
+        product.code
+        +
+        ' - '
+        +
+        product.description
+    );
 
 }
 
@@ -1086,596 +786,1098 @@ function selectProduct(option) {
    CERRAR LISTAS
 ========================================================= */
 
-function closeAllProductLists(
-    exceptContainer = null
+function closeAllLists(
+    except = null
 ) {
 
     document
         .querySelectorAll(
-            ".product-combobox"
+            '.search-results'
         )
-        .forEach(container => {
+        .forEach(
+            list => {
 
-            if (
-                exceptContainer
-                &&
-                container === exceptContainer
-            ) {
+                if (
+                    list !== except
+                ) {
 
-                return;
-
+                    list.classList.remove(
+                        'open'
+                    );
+                }
             }
-
-
-            const results =
-                container.querySelector(
-                    ".product-results"
-                );
-
-
-            if (results) {
-
-                results.style.display =
-                    "none";
-
-            }
-
-        });
+        );
 
 }
 
 
-document.addEventListener(
-    "mousedown",
-    function(event) {
+/* =========================================================
+   PRODUCTOS
+========================================================= */
 
-        if (
-            !event.target.closest(
-                ".product-combobox"
-            )
-        ) {
+function showProductResults(
+    picker
+) {
 
-            closeAllProductLists();
+    const input =
+        picker.querySelector(
+            '.product-search'
+        );
+
+    const results =
+        picker.querySelector(
+            '.search-results'
+        );
+
+
+    const term =
+        normalizeText(
+            input.value.trim()
+        );
+
+
+    const matches =
+        PRODUCTS.filter(
+            product => {
+
+                const text =
+                    normalizeText(
+                        product.code
+                        +
+                        ' '
+                        +
+                        product.description
+                    );
+
+
+                return (
+                    !term
+                    ||
+                    text.includes(
+                        term
+                    )
+                );
+            }
+        );
+
+
+    results.innerHTML =
+        '';
+
+
+    if (
+        matches.length === 0
+    ) {
+
+        results.innerHTML =
+            `
+            <div class="search-empty">
+                No se encontraron productos
+            </div>
+            `;
+
+        results.classList.add(
+            'open'
+        );
+
+        return;
+    }
+
+
+    matches.forEach(
+        product => {
+
+            const option =
+                document.createElement(
+                    'div'
+                );
+
+
+            option.className =
+                'search-result';
+
+
+            option.innerHTML =
+                `
+                <div class="search-result-title">
+
+                    ${escapeHtml(
+                        productLabel(
+                            product
+                        )
+                    )}
+
+                </div>
+
+                <div class="search-result-meta">
+
+                    Stock:
+                    ${formatQuantity(
+                        product.stock
+                    )}
+
+                    ${escapeHtml(
+                        product.unit
+                    )}
+
+                    · Precio:
+                    ${formatMoney(
+                        product.price
+                    )}
+
+                </div>
+                `;
+
+
+            option.addEventListener(
+                'mousedown',
+                event => {
+
+                    event.preventDefault();
+
+                    chooseProduct(
+                        picker,
+                        product
+                    );
+
+                }
+            );
+
+
+            results.appendChild(
+                option
+            );
 
         }
+    );
+
+
+    closeAllLists(
+        results
+    );
+
+
+    results.classList.add(
+        'open'
+    );
+
+}
+
+
+function chooseProduct(
+    picker,
+    product,
+    preservePrice = false
+) {
+
+    const row =
+        picker.closest(
+            'tr'
+        );
+
+
+    picker.querySelector(
+        '.product-search'
+    ).value =
+        productLabel(
+            product
+        );
+
+
+    picker.querySelector(
+        'input[name="product_id[]"]'
+    ).value =
+        product.id;
+
+
+    const priceInput =
+        row.querySelector(
+            'input[name="price[]"]'
+        );
+
+
+    if (
+        !preservePrice
+        ||
+        !priceInput.value
+    ) {
+
+        priceInput.value =
+            Math.round(
+                product.price
+                ||
+                0
+            );
+    }
+
+
+    picker
+        .querySelector(
+            '.search-results'
+        )
+        .classList
+        .remove(
+            'open'
+        );
+
+}
+
+
+/* =========================================================
+   SERVICIOS
+========================================================= */
+
+function showServiceResults(
+    picker
+) {
+
+    const input =
+        picker.querySelector(
+            '.service-search'
+        );
+
+
+    const results =
+        picker.querySelector(
+            '.search-results'
+        );
+
+
+    const term =
+        normalizeText(
+            input.value.trim()
+        );
+
+
+    const matches =
+        SERVICES.filter(
+            service => {
+
+                return (
+                    !term
+                    ||
+                    normalizeText(
+                        service.name
+                    )
+                    .includes(
+                        term
+                    )
+                );
+            }
+        );
+
+
+    results.innerHTML =
+        '';
+
+
+    if (
+        matches.length === 0
+    ) {
+
+        results.innerHTML =
+            `
+            <div class="search-empty">
+                No se encontraron servicios
+            </div>
+            `;
+
+        results.classList.add(
+            'open'
+        );
+
+        return;
+    }
+
+
+    matches.forEach(
+        service => {
+
+            const option =
+                document.createElement(
+                    'div'
+                );
+
+
+            option.className =
+                'search-result';
+
+
+            option.innerHTML =
+                `
+                <div class="search-result-title">
+
+                    ${escapeHtml(
+                        service.name
+                    )}
+
+                </div>
+
+                <div class="search-result-meta">
+
+                    Precio:
+                    ${formatMoney(
+                        service.price
+                    )}
+
+                </div>
+                `;
+
+
+            option.addEventListener(
+                'mousedown',
+                event => {
+
+                    event.preventDefault();
+
+                    chooseService(
+                        picker,
+                        service
+                    );
+
+                }
+            );
+
+
+            results.appendChild(
+                option
+            );
+
+        }
+    );
+
+
+    closeAllLists(
+        results
+    );
+
+
+    results.classList.add(
+        'open'
+    );
+
+}
+
+
+function chooseService(
+    picker,
+    service,
+    preservePrice = false
+) {
+
+    const row =
+        picker.closest(
+            'tr'
+        );
+
+
+    picker.querySelector(
+        '.service-search'
+    ).value =
+        service.name;
+
+
+    picker.querySelector(
+        'input[name="service_id[]"]'
+    ).value =
+        service.id;
+
+
+    const priceInput =
+        row.querySelector(
+            'input[name="service_price[]"]'
+        );
+
+
+    if (
+        !preservePrice
+        ||
+        !priceInput.value
+    ) {
+
+        priceInput.value =
+            Math.round(
+                service.price
+                ||
+                0
+            );
+    }
+
+
+    picker
+        .querySelector(
+            '.search-results'
+        )
+        .classList
+        .remove(
+            'open'
+        );
+
+}
+
+
+/* =========================================================
+   AGREGAR FILAS
+========================================================= */
+
+function addProductRow(
+    productId = '',
+    quantity = 1,
+    price = ''
+) {
+
+    const tbody =
+        document.getElementById(
+            'productBody'
+        );
+
+
+    const row =
+        document.createElement(
+            'tr'
+        );
+
+
+    row.className =
+        'product-row';
+
+
+    row.innerHTML =
+        `
+        <td>
+
+            <div class="search-picker">
+
+                <input
+                    type="text"
+                    class="product-search"
+                    placeholder="Escribe código o descripción..."
+                    autocomplete="off"
+                >
+
+                <input
+                    type="hidden"
+                    name="product_id[]"
+                >
+
+                <div class="search-results">
+                </div>
+
+            </div>
+
+        </td>
+
+        <td>
+
+            <input
+                type="number"
+                name="quantity[]"
+                value="${quantity}"
+                min="1"
+                step="1"
+                required
+            >
+
+        </td>
+
+        <td>
+
+            <input
+                type="number"
+                name="price[]"
+                value="${price}"
+                min="0"
+                step="1"
+                required
+            >
+
+        </td>
+
+        <td>
+
+            <button
+                type="button"
+                class="btn btn-sm btn-light"
+                onclick="this.closest('tr').remove()"
+            >
+                Quitar
+            </button>
+
+        </td>
+        `;
+
+
+    tbody.appendChild(
+        row
+    );
+
+
+    const picker =
+        row.querySelector(
+            '.search-picker'
+        );
+
+
+    const searchInput =
+        picker.querySelector(
+            '.product-search'
+        );
+
+
+    searchInput.addEventListener(
+        'focus',
+        () => {
+
+            showProductResults(
+                picker
+            );
+
+        }
+    );
+
+
+    searchInput.addEventListener(
+        'input',
+        () => {
+
+            picker.querySelector(
+                'input[name="product_id[]"]'
+            ).value =
+                '';
+
+
+            showProductResults(
+                picker
+            );
+
+        }
+    );
+
+
+    if (
+        productId
+    ) {
+
+        const product =
+            findProduct(
+                productId
+            );
+
+
+        if (
+            product
+        ) {
+
+            chooseProduct(
+                picker,
+                product,
+                true
+            );
+        }
+    }
+
+}
+
+
+function addServiceRow(
+    serviceId = '',
+    worker = '',
+    quantity = 1,
+    price = ''
+) {
+
+    const tbody =
+        document.getElementById(
+            'serviceBody'
+        );
+
+
+    const row =
+        document.createElement(
+            'tr'
+        );
+
+
+    row.className =
+        'service-row';
+
+
+    row.innerHTML =
+        `
+        <td>
+
+            <div class="search-picker">
+
+                <input
+                    type="text"
+                    class="service-search"
+                    placeholder="Escribe para buscar servicio..."
+                    autocomplete="off"
+                >
+
+                <input
+                    type="hidden"
+                    name="service_id[]"
+                >
+
+                <div class="search-results">
+                </div>
+
+            </div>
+
+        </td>
+
+        <td>
+
+            <input
+                name="service_worker[]"
+                value="${worker}"
+                placeholder="Trabajador"
+                required
+            >
+
+        </td>
+
+        <td>
+
+            <input
+                type="number"
+                name="service_quantity[]"
+                value="${quantity}"
+                min="1"
+                step="1"
+                required
+            >
+
+        </td>
+
+        <td>
+
+            <input
+                type="number"
+                name="service_price[]"
+                value="${price}"
+                min="0"
+                step="1"
+                required
+            >
+
+        </td>
+
+        <td>
+
+            <button
+                type="button"
+                class="btn btn-sm btn-light"
+                onclick="this.closest('tr').remove()"
+            >
+                Quitar
+            </button>
+
+        </td>
+        `;
+
+
+    tbody.appendChild(
+        row
+    );
+
+
+    const picker =
+        row.querySelector(
+            '.search-picker'
+        );
+
+
+    const searchInput =
+        picker.querySelector(
+            '.service-search'
+        );
+
+
+    searchInput.addEventListener(
+        'focus',
+        () => {
+
+            showServiceResults(
+                picker
+            );
+
+        }
+    );
+
+
+    searchInput.addEventListener(
+        'input',
+        () => {
+
+            picker.querySelector(
+                'input[name="service_id[]"]'
+            ).value =
+                '';
+
+
+            showServiceResults(
+                picker
+            );
+
+        }
+    );
+
+
+    if (
+        serviceId
+    ) {
+
+        const service =
+            findService(
+                serviceId
+            );
+
+
+        if (
+            service
+        ) {
+
+            chooseService(
+                picker,
+                service,
+                true
+            );
+        }
+    }
+
+}
+
+
+/* =========================================================
+   VALIDACIÓN
+========================================================= */
+
+function validateInvoice(
+    event
+) {
+
+    const productRows =
+        document.querySelectorAll(
+            '.product-row'
+        );
+
+
+    for (
+        const row
+        of
+        productRows
+    ) {
+
+        const id =
+            row.querySelector(
+                'input[name="product_id[]"]'
+            ).value;
+
+
+        if (
+            !id
+        ) {
+
+            event.preventDefault();
+
+            alert(
+                'Selecciona un producto válido de la lista.'
+            );
+
+            row.querySelector(
+                '.product-search'
+            ).focus();
+
+            return false;
+        }
+    }
+
+
+    const serviceRows =
+        document.querySelectorAll(
+            '.service-row'
+        );
+
+
+    for (
+        const row
+        of
+        serviceRows
+    ) {
+
+        const id =
+            row.querySelector(
+                'input[name="service_id[]"]'
+            ).value;
+
+
+        if (
+            !id
+        ) {
+
+            event.preventDefault();
+
+            alert(
+                'Selecciona un servicio válido de la lista.'
+            );
+
+            row.querySelector(
+                '.service-search'
+            ).focus();
+
+            return false;
+        }
+    }
+
+
+    return true;
+
+}
+
+
+/* =========================================================
+   CRÉDITO
+========================================================= */
+
+function toggleCreditFields() {
+
+    const payment =
+        document.getElementById(
+            'payment_method'
+        );
+
+
+    const fields =
+        document.getElementById(
+            'creditFields'
+        );
+
+
+    fields.style.display =
+        payment.value
+        ===
+        'Crédito'
+            ?
+            'block'
+            :
+            'none';
+
+}
+
+
+/* =========================================================
+   FECHA
+========================================================= */
+
+function setToday() {
+
+    const field =
+        document.getElementById(
+            'issued_date'
+        );
+
+
+    if (
+        field.value
+    ) {
+
+        return;
+    }
+
+
+    const date =
+        new Date();
+
+
+    const year =
+        date.getFullYear();
+
+
+    const month =
+        String(
+            date.getMonth()
+            +
+            1
+        )
+        .padStart(
+            2,
+            '0'
+        );
+
+
+    const day =
+        String(
+            date.getDate()
+        )
+        .padStart(
+            2,
+            '0'
+        );
+
+
+    field.value =
+        `${year}-${month}-${day}`;
+
+}
+
+
+/* =========================================================
+   RESTAURAR FORMULARIO
+========================================================= */
+
+function readJson(
+    elementId
+) {
+
+    const element =
+        document.getElementById(
+            elementId
+        );
+
+
+    try {
+
+        return JSON.parse(
+            element.value
+            ||
+            '[]'
+        );
+
+    }
+    catch {
+
+        return [];
+    }
+
+}
+
+
+/* =========================================================
+   INICIAR
+========================================================= */
+
+document.addEventListener(
+    'DOMContentLoaded',
+    () => {
+
+        setToday();
+
+        toggleCreditFields();
+
+
+        const productIds =
+            readJson(
+                'postedProductIds'
+            );
+
+        const productQty =
+            readJson(
+                'postedProductQuantities'
+            );
+
+        const productPrices =
+            readJson(
+                'postedProductPrices'
+            );
+
+
+        productIds.forEach(
+            (id, index) => {
+
+                if (
+                    id
+                ) {
+
+                    addProductRow(
+                        id,
+                        productQty[index]
+                        ||
+                        1,
+                        productPrices[index]
+                        ||
+                        ''
+                    );
+                }
+            }
+        );
+
+
+        const serviceIds =
+            readJson(
+                'postedServiceIds'
+            );
+
+        const serviceWorkers =
+            readJson(
+                'postedServiceWorkers'
+            );
+
+        const serviceQty =
+            readJson(
+                'postedServiceQuantities'
+            );
+
+        const servicePrices =
+            readJson(
+                'postedServicePrices'
+            );
+
+
+        serviceIds.forEach(
+            (id, index) => {
+
+                if (
+                    id
+                ) {
+
+                    addServiceRow(
+                        id,
+                        serviceWorkers[index]
+                        ||
+                        '',
+                        serviceQty[index]
+                        ||
+                        1,
+                        servicePrices[index]
+                        ||
+                        ''
+                    );
+                }
+            }
+        );
+
+
+        document
+            .getElementById(
+                'invoiceForm'
+            )
+            .addEventListener(
+                'submit',
+                validateInvoice
+            );
 
     }
 );
 
 
-/* =========================================================
-   AGREGAR PRODUCTO
-========================================================= */
+document.addEventListener(
+    'click',
+    event => {
 
-function addProductRow(data = null) {
+        if (
+            !event.target.closest(
+                '.search-picker'
+            )
+        ) {
 
-    const template =
-        document.getElementById(
-            "productTemplate"
-        );
-
-
-    const fragment =
-        template.content.cloneNode(true);
-
-
-    const row =
-        fragment.querySelector("tr");
-
-
-    document
-        .getElementById(
-            "productsBody"
-        )
-        .append(fragment);
-
-
-    if (data) {
-
-        const container =
-            row.querySelector(
-                ".product-combobox"
-            );
-
-
-        const searchInput =
-            container.querySelector(
-                ".product-search"
-            );
-
-
-        const productId =
-            container.querySelector(
-                ".product-id"
-            );
-
-
-        const options =
-            container.querySelectorAll(
-                ".product-option"
-            );
-
-
-        let selectedOption = null;
-
-
-        options.forEach(option => {
-
-            if (
-                String(
-                    option.dataset.id
-                )
-                ===
-                String(
-                    data.id
-                )
-            ) {
-
-                selectedOption =
-                    option;
-
-            }
-
-        });
-
-
-        if (selectedOption) {
-
-            searchInput.value =
-                selectedOption.dataset.name;
-
-
-            productId.value =
-                selectedOption.dataset.id;
-
-
-            row
-                .querySelector(
-                    ".stock"
-                )
-                .textContent =
-                    selectedOption.dataset.stock
-                    || "-";
+            closeAllLists();
 
         }
 
-
-        row
-            .querySelector(
-                '[name="quantity[]"]'
-            )
-            .value =
-                data.quantity || 1;
-
-
-        row
-            .querySelector(
-                '[name="price[]"]'
-            )
-            .value =
-                data.price || 0;
-
     }
-
-
-    calculate();
-
-}
-
-
-/* =========================================================
-   AGREGAR SERVICIO
-========================================================= */
-
-function addServiceRow(data = null) {
-
-    const template =
-        document.getElementById(
-            "serviceTemplate"
-        );
-
-
-    const fragment =
-        template.content.cloneNode(true);
-
-
-    const row =
-        fragment.querySelector("tr");
-
-
-    document
-        .getElementById(
-            "servicesBody"
-        )
-        .append(fragment);
-
-
-    if (data) {
-
-        const select =
-            row.querySelector(
-                '[name="service_id[]"]'
-            );
-
-
-        select.value =
-            data.id || "";
-
-
-        row
-            .querySelector(
-                '[name="service_worker[]"]'
-            )
-            .value =
-                data.worker || "";
-
-
-        row
-            .querySelector(
-                '[name="service_quantity[]"]'
-            )
-            .value =
-                data.quantity || 1;
-
-
-        row
-            .querySelector(
-                '[name="service_price[]"]'
-            )
-            .value =
-                data.price || 0;
-
-    }
-
-
-    calculate();
-
-}
-
-
-/* =========================================================
-   CAMBIO SERVICIO
-========================================================= */
-
-function serviceChanged(select) {
-
-    const option =
-        select.options[
-            select.selectedIndex
-        ];
-
-
-    const row =
-        select.closest("tr");
-
-
-    row
-        .querySelector(
-            '[name="service_price[]"]'
-        )
-        .value =
-            option.dataset.price || 0;
-
-
-    calculate();
-
-}
-
-
-/* =========================================================
-   CALCULAR
-========================================================= */
-
-function calculate() {
-
-    let subtotal = 0;
-    let workerTotal = 0;
-    let businessTotal = 0;
-
-
-    /* PRODUCTOS */
-
-    document
-        .querySelectorAll(
-            "#productsBody tr"
-        )
-        .forEach(row => {
-
-            const productId =
-                row.querySelector(
-                    '[name="product_id[]"]'
-                );
-
-
-            const quantity =
-                parseFloat(
-                    row.querySelector(
-                        '[name="quantity[]"]'
-                    ).value
-                ) || 0;
-
-
-            const price =
-                parseFloat(
-                    row.querySelector(
-                        '[name="price[]"]'
-                    ).value
-                ) || 0;
-
-
-            const total =
-                productId.value
-                    ? quantity * price
-                    : 0;
-
-
-            subtotal += total;
-
-
-            row
-                .querySelector(
-                    ".line-total"
-                )
-                .textContent =
-                    money(total);
-
-        });
-
-
-    /* SERVICIOS */
-
-    document
-        .querySelectorAll(
-            "#servicesBody tr"
-        )
-        .forEach(row => {
-
-            const select =
-                row.querySelector(
-                    '[name="service_id[]"]'
-                );
-
-
-            const quantity =
-                parseFloat(
-                    row.querySelector(
-                        '[name="service_quantity[]"]'
-                    ).value
-                ) || 0;
-
-
-            const price =
-                parseFloat(
-                    row.querySelector(
-                        '[name="service_price[]"]'
-                    ).value
-                ) || 0;
-
-
-            const total =
-                select.value
-                    ? quantity * price
-                    : 0;
-
-
-            const worker =
-                total * 0.70;
-
-
-            const business =
-                total * 0.30;
-
-
-            subtotal += total;
-
-            workerTotal += worker;
-
-            businessTotal += business;
-
-
-            row
-                .querySelector(
-                    ".service-line-total"
-                )
-                .textContent =
-                    money(total);
-
-
-            row
-                .querySelector(
-                    ".worker-share"
-                )
-                .textContent =
-                    money(worker);
-
-
-            row
-                .querySelector(
-                    ".business-share"
-                )
-                .textContent =
-                    money(business);
-
-        });
-
-
-    const tax =
-        subtotal * taxRate / 100;
-
-
-    document
-        .getElementById(
-            "subtotal"
-        )
-        .textContent =
-            money(subtotal);
-
-
-    document
-        .getElementById(
-            "tax"
-        )
-        .textContent =
-            money(tax);
-
-
-    document
-        .getElementById(
-            "total"
-        )
-        .textContent =
-            money(
-                subtotal + tax
-            );
-
-
-    document
-        .getElementById(
-            "workerTotal"
-        )
-        .textContent =
-            money(workerTotal);
-
-
-    document
-        .getElementById(
-            "businessTotal"
-        )
-        .textContent =
-            money(businessTotal);
-
-}
-
-
-/* =========================================================
-   RESTAURAR PRODUCTOS
-========================================================= */
-
-const previousProductElements =
-    document.querySelectorAll(
-        ".previous-product"
-    );
-
-
-if (
-    previousProductElements.length > 0
-) {
-
-    previousProductElements
-        .forEach(element => {
-
-            const productId =
-                element.dataset.id;
-
-
-            if (!productId) {
-
-                return;
-
-            }
-
-
-            addProductRow({
-
-                id:
-                    productId,
-
-                quantity:
-                    element.dataset.quantity
-                    || 1,
-
-                price:
-                    element.dataset.price
-                    || 0
-
-            });
-
-        });
-
-}
-else {
-
-    addProductRow();
-
-}
-
-
-/* =========================================================
-   RESTAURAR SERVICIOS
-========================================================= */
-
-const previousServiceElements =
-    document.querySelectorAll(
-        ".previous-service"
-    );
-
-
-if (
-    previousServiceElements.length > 0
-) {
-
-    previousServiceElements
-        .forEach(element => {
-
-            const serviceId =
-                element.dataset.id;
-
-
-            if (!serviceId) {
-
-                return;
-
-            }
-
-
-            addServiceRow({
-
-                id:
-                    serviceId,
-
-                worker:
-                    element.dataset.worker
-                    || "",
-
-                quantity:
-                    element.dataset.quantity
-                    || 1,
-
-                price:
-                    element.dataset.price
-                    || 0
-
-            });
-
-        });
-
-}
-
-
-
-/* =========================================================
-   CAMPOS DE CRÉDITO
-========================================================= */
-
-function toggleCreditFields() {
-    const paymentMethod = document.getElementById("payment_method");
-    const creditFields = document.getElementById("creditFields");
-
-    if (!paymentMethod || !creditFields) {
-        return;
-    }
-
-    creditFields.style.display =
-        paymentMethod.value === "Crédito" ? "block" : "none";
-}
-
-toggleCreditFields();
-
-/* =========================================================
-   CÁLCULO INICIAL
-========================================================= */
-
-calculate();
+);
 
 </script>
 

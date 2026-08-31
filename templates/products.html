@@ -15,7 +15,10 @@
             placeholder="Buscar por código, descripción o categoría"
         >
 
-        <button class="btn btn-primary">
+        <button
+            class="btn btn-primary"
+            type="submit"
+        >
             Buscar
         </button>
 
@@ -50,42 +53,64 @@
 
             <tr>
 
-                <th>Código</th>
+                <th>
+                    Código
+                </th>
 
-                <th>Descripción</th>
+                <th>
+                    Descripción
+                </th>
 
-                <th>Categoría</th>
+                <th>
+                    Categoría
+                </th>
 
-                <th>Stock</th>
+                <th>
+                    Stock
+                </th>
 
-                <th>Mínimo</th>
+                <th>
+                    Mínimo
+                </th>
 
 
                 {% if g.user["role"] == "administrador" %}
 
-                    <th>Costo</th>
+                    <th>
+                        Costo
+                    </th>
 
                 {% endif %}
 
 
-                <th>Precio venta</th>
+                <th>
+                    Precio venta
+                </th>
 
 
                 {% if g.user["role"] == "administrador" %}
 
-                    <th>Ganancia $</th>
+                    <th>
+                        Ganancia $
+                    </th>
 
-                    <th>% Ganancia</th>
+                    <th>
+                        % Ganancia
+                    </th>
 
                 {% endif %}
 
 
-                <th>Estado</th>
+                <th>
+                    Estado
+                </th>
 
 
                 {% if g.user["role"] == "administrador" %}
 
-                    <th></th>
+                    <th>
+                        Acciones
+                    </th>
 
                 {% endif %}
 
@@ -100,10 +125,15 @@
 
             <tr>
 
+
+                <!-- CÓDIGO -->
+
                 <td>
                     {{ p.code }}
                 </td>
 
+
+                <!-- DESCRIPCIÓN -->
 
                 <td>
 
@@ -120,20 +150,29 @@
                 </td>
 
 
+                <!-- CATEGORÍA -->
+
                 <td>
                     {{ p.category }}
                 </td>
 
 
+                <!-- STOCK -->
+
                 <td>
-                    {{ p.stock|int }} {{ p.unit }}
+                    {{ p.stock|int }}
+                    {{ p.unit }}
                 </td>
 
+
+                <!-- STOCK MÍNIMO -->
 
                 <td>
                     {{ p.min_stock|int }}
                 </td>
 
+
+                <!-- COSTO -->
 
                 {% if g.user["role"] == "administrador" %}
 
@@ -144,12 +183,17 @@
                 {% endif %}
 
 
+                <!-- PRECIO DE VENTA -->
+
                 <td>
                     {{ p.sale_price|money }}
                 </td>
 
 
+                <!-- GANANCIAS -->
+
                 {% if g.user["role"] == "administrador" %}
+
 
                     <td>
 
@@ -170,7 +214,22 @@
 
                         {% if p.cost and p.cost > 0 %}
 
-                            {{ (((p.sale_price - p.cost) / p.cost) * 100)|round(1) }}%
+                            {{
+                                (
+                                    (
+                                        (
+                                            p.sale_price
+                                            -
+                                            p.cost
+                                        )
+                                        /
+                                        p.cost
+                                    )
+                                    *
+                                    100
+                                )
+                                |round(1)
+                            }}%
 
                         {% else %}
 
@@ -180,8 +239,11 @@
 
                     </td>
 
+
                 {% endif %}
 
+
+                <!-- ESTADO -->
 
                 <td>
 
@@ -208,25 +270,88 @@
                 </td>
 
 
+                <!-- ACCIONES -->
+
                 {% if g.user["role"] == "administrador" %}
 
                     <td>
 
-                        <a
-                            class="btn btn-sm btn-light"
-                            href="{{ url_for(
-                                'product_edit',
-                                product_id=p.id
-                            ) }}"
+                        <div
+                            class="actions"
+                            style="
+                                display:flex;
+                                gap:8px;
+                                flex-wrap:nowrap;
+                                align-items:center;
+                            "
                         >
-                            Editar
-                        </a>
+
+
+                            <a
+                                class="btn btn-sm btn-light"
+                                href="{{ url_for(
+                                    'product_edit',
+                                    product_id=p.id
+                                ) }}"
+                            >
+                                Editar
+                            </a>
+
+
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'product_delete',
+                                    product_id=p.id
+                                ) }}"
+                                style="
+                                    margin:0;
+                                    display:inline;
+                                "
+                                onsubmit="
+                                    return confirm(
+                                        '¿Seguro que deseas eliminar este producto del inventario?'
+                                    );
+                                "
+                            >
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-sm btn-danger"
+                                    style="
+                                        background:#d7190f;
+                                        color:white;
+                                    "
+                                >
+                                    Eliminar
+                                </button>
+
+                            </form>
+
+
+                        </div>
 
                     </td>
 
                 {% endif %}
 
+
             </tr>
+
+        {% else %}
+
+
+            <tr>
+
+                <td
+                    colspan="11"
+                    class="muted"
+                >
+                    No hay productos registrados.
+                </td>
+
+            </tr>
+
 
         {% endfor %}
 
