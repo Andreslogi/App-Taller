@@ -1,0 +1,643 @@
+{% extends 'base.html' %}
+
+{% set heading='Facturas pendientes' %}
+
+{% block content %}
+
+<style>
+
+.payable-summary {
+    display:grid;
+    grid-template-columns:repeat(4, minmax(180px, 1fr));
+    gap:16px;
+    margin-bottom:20px;
+}
+
+.payable-card {
+    padding:18px;
+    border-radius:12px;
+    border:1px solid #e5e7eb;
+    background:white;
+}
+
+.payable-card .label {
+    font-size:13px;
+    color:#667085;
+}
+
+.payable-card .number {
+    margin-top:6px;
+    font-size:25px;
+    font-weight:800;
+}
+
+.card-green {
+    border-left:6px solid #22a447;
+}
+
+.card-orange {
+    border-left:6px solid #f28c28;
+}
+
+.card-red {
+    border-left:6px solid #d71920;
+}
+
+.semaphore {
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    padding:7px 11px;
+    border-radius:999px;
+    font-weight:700;
+    white-space:nowrap;
+}
+
+.semaphore::before {
+    content:'';
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    display:inline-block;
+}
+
+.sem-green {
+    color:#126c2e;
+    background:#e9f8ed;
+}
+
+.sem-green::before {
+    background:#22a447;
+}
+
+.sem-orange {
+    color:#9a5200;
+    background:#fff1df;
+}
+
+.sem-orange::before {
+    background:#f28c28;
+}
+
+.sem-red {
+    color:#a31217;
+    background:#fde9ea;
+}
+
+.sem-red::before {
+    background:#d71920;
+}
+
+.sem-paid {
+    color:#35505d;
+    background:#edf2f4;
+}
+
+.sem-paid::before {
+    background:#78909c;
+}
+
+.days-warning {
+    font-weight:700;
+}
+
+.actions-column {
+    min-width:220px;
+}
+
+.inline-payment {
+    margin-top:10px;
+    padding:12px;
+    background:#f8fafc;
+    border-radius:8px;
+}
+
+.inline-payment input,
+.inline-payment select {
+    margin-bottom:7px;
+}
+
+@media(max-width:900px) {
+
+    .payable-summary {
+        grid-template-columns:1fr 1fr;
+    }
+
+}
+
+</style>
+
+
+<div class="actions" style="margin-bottom:18px;">
+
+    <a
+        class="btn btn-primary"
+        href="{{ url_for('account_payable_new') }}"
+    >
+        + Registrar factura
+    </a>
+
+</div>
+
+
+<div class="payable-summary">
+
+    <div class="payable-card">
+
+        <div class="label">
+            Total pendiente
+        </div>
+
+        <div class="number">
+            {{ total_open|money }}
+        </div>
+
+    </div>
+
+
+    <div class="payable-card card-green">
+
+        <div class="label">
+            🟢 Pendientes
+        </div>
+
+        <div class="number">
+            {{ total_pending|money }}
+        </div>
+
+        <small>
+            {{ count_pending }} factura(s)
+        </small>
+
+    </div>
+
+
+    <div class="payable-card card-orange">
+
+        <div class="label">
+            🟠 Próximas a vencer
+        </div>
+
+        <div class="number">
+            {{ total_upcoming|money }}
+        </div>
+
+        <small>
+            {{ count_upcoming }} factura(s)
+        </small>
+
+    </div>
+
+
+    <div class="payable-card card-red">
+
+        <div class="label">
+            🔴 Vencidas
+        </div>
+
+        <div class="number">
+            {{ total_overdue|money }}
+        </div>
+
+        <small>
+            {{ count_overdue }} factura(s)
+        </small>
+
+    </div>
+
+</div>
+
+
+<div class="card">
+
+    <form method="get">
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>
+                    Buscar
+                </label>
+
+                <input
+                    type="text"
+                    name="q"
+                    value="{{ q }}"
+                    placeholder="Proveedor, factura, descripción..."
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Estado
+                </label>
+
+                <select name="status">
+
+                    {% for value, label in [
+                        ('ABIERTAS', 'Abiertas'),
+                        ('PENDIENTE', 'Pendientes'),
+                        ('PROXIMA A VENCER', 'Próximas a vencer'),
+                        ('VENCIDA', 'Vencidas'),
+                        ('PAGADA', 'Pagadas'),
+                        ('TODAS', 'Todas')
+                    ] %}
+
+                        <option
+                            value="{{ value }}"
+                            {% if status_filter == value %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ label }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+                Filtrar
+            </button>
+
+            <a
+                class="btn btn-light"
+                href="{{ url_for('accounts_payable') }}"
+            >
+                Limpiar
+            </a>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<div class="card">
+
+    {% if accounts %}
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Proveedor</th>
+                        <th>Factura</th>
+                        <th>Compra</th>
+                        <th>Vencimiento</th>
+                        <th>Valor</th>
+                        <th>Pagado</th>
+                        <th>Saldo</th>
+                        <th>Días</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                {% for account in accounts %}
+
+                    <tr>
+
+                        <td>
+
+                            <strong>
+                                {{ account.supplier }}
+                            </strong>
+
+                            {% if account.description %}
+
+                                <div class="muted">
+                                    {{ account.description }}
+                                </div>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td>
+                            {{ account.invoice_number }}
+                        </td>
+
+
+                        <td>
+                            {{ account.purchase_date|string|truncate(10, True, '') }}
+                        </td>
+
+
+                        <td>
+                            {{ account.due_date|string|truncate(10, True, '') }}
+                        </td>
+
+
+                        <td>
+                            {{ account.original_amount|money }}
+                        </td>
+
+
+                        <td>
+                            {{ account.paid_amount|money }}
+                        </td>
+
+
+                        <td>
+                            <strong>
+                                {{ account.balance|money }}
+                            </strong>
+                        </td>
+
+
+                        <td>
+
+                            {% if account.display_status == 'PAGADA' %}
+
+                                -
+
+                            {% elif account.days_remaining is not none %}
+
+                                {% if account.days_remaining < 0 %}
+
+                                    <span class="days-warning">
+                                        {{ account.days_remaining|abs }} día(s) vencida
+                                    </span>
+
+                                {% elif account.days_remaining == 0 %}
+
+                                    <span class="days-warning">
+                                        Vence hoy
+                                    </span>
+
+                                {% else %}
+
+                                    {{ account.days_remaining }} día(s)
+
+                                {% endif %}
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td>
+
+                            {% if account.display_status == 'PENDIENTE' %}
+
+                                <span class="semaphore sem-green">
+                                    PENDIENTE
+                                </span>
+
+                            {% elif account.display_status == 'PROXIMA A VENCER' %}
+
+                                <span class="semaphore sem-orange">
+                                    PRÓXIMA A VENCER
+                                </span>
+
+                            {% elif account.display_status == 'VENCIDA' %}
+
+                                <span class="semaphore sem-red">
+                                    VENCIDA
+                                </span>
+
+                            {% else %}
+
+                                <span class="semaphore sem-paid">
+                                    PAGADA
+                                </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td class="actions-column">
+
+                            <div class="actions">
+
+                                <a
+                                    class="btn btn-sm btn-light"
+                                    href="{{ url_for(
+                                        'account_payable_history',
+                                        account_id=account.id
+                                    ) }}"
+                                >
+                                    Historial
+                                </a>
+
+
+                                <a
+                                    class="btn btn-sm btn-light"
+                                    href="{{ url_for(
+                                        'account_payable_edit',
+                                        account_id=account.id
+                                    ) }}"
+                                >
+                                    Editar
+                                </a>
+
+                            </div>
+
+
+                            {% if account.balance > 0 %}
+
+                                <details
+                                    class="inline-payment"
+                                >
+
+                                    <summary>
+                                        Registrar pago
+                                    </summary>
+
+
+                                    <form
+                                        method="post"
+                                        action="{{ url_for(
+                                            'account_payable_payment',
+                                            account_id=account.id
+                                        ) }}"
+                                    >
+
+                                        <div class="form-group">
+
+                                            <label>
+                                                Valor
+                                            </label>
+
+                                            <input
+                                                type="number"
+                                                name="amount"
+                                                min="1"
+                                                max="{{ account.balance }}"
+                                                step="1"
+                                                required
+                                            >
+
+                                        </div>
+
+
+                                        <div class="form-group">
+
+                                            <label>
+                                                Fecha
+                                            </label>
+
+                                            <input
+                                                type="date"
+                                                name="payment_date"
+                                            >
+
+                                        </div>
+
+
+                                        <div class="form-group">
+
+                                            <label>
+                                                Forma de pago
+                                            </label>
+
+                                            <select
+                                                name="payment_method"
+                                            >
+
+                                                <option>
+                                                    Transferencia
+                                                </option>
+
+                                                <option>
+                                                    Efectivo
+                                                </option>
+
+                                                <option>
+                                                    Tarjeta
+                                                </option>
+
+                                                <option>
+                                                    Otro
+                                                </option>
+
+                                            </select>
+
+                                        </div>
+
+
+                                        <div class="form-group">
+
+                                            <label>
+                                                Nota
+                                            </label>
+
+                                            <input
+                                                name="notes"
+                                            >
+
+                                        </div>
+
+
+                                        <button
+                                            class="btn btn-sm btn-primary"
+                                            type="submit"
+                                        >
+                                            Registrar abono
+                                        </button>
+
+                                    </form>
+
+
+                                    <hr>
+
+
+                                    <form
+                                        method="post"
+                                        action="{{ url_for(
+                                            'account_payable_pay_full',
+                                            account_id=account.id
+                                        ) }}"
+                                        onsubmit="
+                                            return confirm(
+                                                '¿Confirmas que esta factura fue pagada completamente?'
+                                            );
+                                        "
+                                    >
+
+                                        <select
+                                            name="payment_method"
+                                        >
+
+                                            <option>
+                                                Transferencia
+                                            </option>
+
+                                            <option>
+                                                Efectivo
+                                            </option>
+
+                                            <option>
+                                                Tarjeta
+                                            </option>
+
+                                            <option>
+                                                Otro
+                                            </option>
+
+                                        </select>
+
+
+                                        <button
+                                            type="submit"
+                                            class="btn btn-sm btn-success"
+                                        >
+                                            Pagar saldo completo
+                                        </button>
+
+                                    </form>
+
+                                </details>
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p class="muted">
+            No hay facturas para mostrar.
+        </p>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}

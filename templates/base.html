@@ -1,12 +1,1235 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title or 'Inventario y Remisiones' }}</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
-<div class="layout"><aside class="sidebar"><div class="brand">Inventario & Remisiones</div><nav class="nav">
-<a href="{{ url_for('dashboard') }}">Inicio</a><a href="{{ url_for('products') }}">Productos</a>
-{% if g.user.role == 'administrador' %}<a href="{{ url_for('movements') }}">Movimientos</a>{% endif %}
-<a href="{{ url_for('services') }}">Servicios</a><a href="{{ url_for('salespeople') }}">Vendedores</a>
-<a href="{{ url_for('invoice_new') }}">Nueva remisión</a><a href="{{ url_for('invoices') }}">Remisiones</a><a href="{{ url_for('accounts_receivable') }}">Cuentas por cobrar</a>
-{% if g.user.role == 'administrador' %}<a href="{{ url_for('finances') }}">Finanzas</a>{% endif %}
-{% if g.user.role == 'administrador' %}<a href="{{ url_for('users') }}">Usuarios</a><a href="{{ url_for('settings_view') }}">Configuración</a>{% endif %}
-</nav></aside>
-<main class="main"><div class="topbar"><h1>{{ heading or 'Control de inventario' }}</h1><div class="actions"><span>{{ g.user.full_name }} · {{ g.user.role|capitalize }}</span><a class="btn btn-success" href="{{ url_for('invoice_new') }}">+ Nueva remisión</a><a class="btn" href="{{ url_for('logout') }}">Salir</a></div></div>
-{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
-{% block content %}{% endblock %}</main></div>{% block scripts %}{% endblock %}</body></html>
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        {% if heading %}
+            {{ heading }} |
+        {% endif %}
+        Inventario y Remisiones
+    </title>
+
+    <!-- Conservamos tus estilos existentes -->
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+    <style>
+
+        :root {
+            --sidebar-width: 245px;
+            --primary: #1f4e78;
+            --primary-dark: #143653;
+            --sidebar-bg: #173f63;
+            --sidebar-bg-dark: #102f4c;
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-500: #64748b;
+            --gray-700: #334155;
+            --gray-900: #0f172a;
+        }
+
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+
+        body {
+            background: #f4f7fa;
+            color: var(--gray-900);
+        }
+
+
+        /* ==================================================
+           ESTRUCTURA
+        ================================================== */
+
+        .app-shell {
+            min-height: 100vh;
+        }
+
+
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+
+            width: var(--sidebar-width);
+
+            display: flex;
+            flex-direction: column;
+
+            background:
+                linear-gradient(
+                    180deg,
+                    var(--sidebar-bg),
+                    var(--sidebar-bg-dark)
+                );
+
+            color: white;
+
+            z-index: 1000;
+
+            overflow-y: auto;
+
+            box-shadow:
+                3px 0 15px
+                rgba(0, 0, 0, .08);
+        }
+
+
+        .main-wrapper {
+            min-height: 100vh;
+            margin-left: var(--sidebar-width);
+        }
+
+
+        /* ==================================================
+           LOGO / MARCA
+        ================================================== */
+
+        .sidebar-header {
+            padding: 22px 18px;
+
+            border-bottom:
+                1px solid
+                rgba(255, 255, 255, .12);
+        }
+
+
+        .sidebar-title {
+            margin: 0;
+
+            font-size: 21px;
+            font-weight: 800;
+        }
+
+
+        .sidebar-subtitle {
+            margin-top: 4px;
+
+            color:
+                rgba(255, 255, 255, .65);
+
+            font-size: 12px;
+        }
+
+
+        /* ==================================================
+           MENÚ
+        ================================================== */
+
+        .sidebar-nav {
+            flex: 1;
+
+            padding:
+                12px
+                10px
+                20px;
+        }
+
+
+        .nav-section {
+            margin:
+                18px
+                11px
+                7px;
+
+            color:
+                rgba(255,255,255,.48);
+
+            font-size: 10px;
+            font-weight: 800;
+
+            letter-spacing: 1px;
+
+            text-transform: uppercase;
+        }
+
+
+        .nav-link {
+            display: flex;
+
+            align-items: center;
+
+            gap: 10px;
+
+            min-height: 42px;
+
+            margin-bottom: 4px;
+
+            padding:
+                9px
+                12px;
+
+            border-radius: 8px;
+
+            color:
+                rgba(255,255,255,.88);
+
+            font-size: 14px;
+
+            text-decoration: none;
+
+            transition:
+                background .15s ease,
+                color .15s ease;
+        }
+
+
+        .nav-link:hover {
+            color: white;
+
+            background:
+                rgba(255,255,255,.10);
+        }
+
+
+        .nav-link.active {
+            color: var(--primary);
+
+            background: white;
+
+            font-weight: 700;
+        }
+
+
+        .nav-icon {
+            width: 21px;
+
+            flex-shrink: 0;
+
+            text-align: center;
+        }
+
+
+        /* ==================================================
+           USUARIO
+        ================================================== */
+
+        .sidebar-footer {
+            padding: 15px;
+
+            border-top:
+                1px solid
+                rgba(255,255,255,.12);
+
+            background:
+                rgba(0,0,0,.08);
+        }
+
+
+        .sidebar-user-name {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+
+        .sidebar-user-role {
+            margin-top: 3px;
+
+            color:
+                rgba(255,255,255,.60);
+
+            font-size: 11px;
+        }
+
+
+        .logout-link {
+            display: inline-block;
+
+            margin-top: 9px;
+
+            color: #ffdada;
+
+            font-size: 12px;
+
+            text-decoration: none;
+        }
+
+
+        .logout-link:hover {
+            color: white;
+        }
+
+
+        /* ==================================================
+           TOP BAR
+        ================================================== */
+
+        .topbar {
+            min-height: 67px;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: space-between;
+
+            gap: 15px;
+
+            padding:
+                11px
+                26px;
+
+            position: sticky;
+
+            top: 0;
+
+            z-index: 800;
+
+            background: white;
+
+            border-bottom:
+                1px solid
+                var(--gray-200);
+        }
+
+
+        .topbar-left {
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+        }
+
+
+        .page-heading {
+            margin: 0;
+
+            color: var(--gray-900);
+
+            font-size: 22px;
+            font-weight: 750;
+        }
+
+
+        .topbar-user {
+            color: var(--gray-500);
+
+            font-size: 12px;
+
+            text-align: right;
+        }
+
+
+        /* ==================================================
+           CONTENIDO
+        ================================================== */
+
+        .page-content {
+            width: 100%;
+            max-width: 1700px;
+
+            margin: 0 auto;
+
+            padding:
+                24px
+                27px
+                45px;
+        }
+
+
+        /* ==================================================
+           SOPORTE PARA TEMPLATES EXISTENTES
+        ================================================== */
+
+        .card {
+            margin-bottom: 20px;
+
+            padding: 20px;
+
+            background: white;
+
+            border:
+                1px solid
+                var(--gray-200);
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(15,23,42,.04);
+        }
+
+
+        .actions {
+            display: flex;
+
+            align-items: center;
+
+            gap: 9px;
+
+            flex-wrap: wrap;
+        }
+
+
+        .form-grid {
+            display: grid;
+
+            grid-template-columns:
+                repeat(
+                    2,
+                    minmax(0, 1fr)
+                );
+
+            gap:
+                16px
+                20px;
+        }
+
+
+        .form-group {
+            display: flex;
+
+            flex-direction: column;
+
+            gap: 6px;
+
+            margin-bottom: 12px;
+        }
+
+
+        .form-group label {
+            font-size: 13px;
+
+            font-weight: 700;
+
+            color: var(--gray-700);
+        }
+
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+
+            padding:
+                10px
+                12px;
+
+            border:
+                1px solid
+                var(--gray-300);
+
+            border-radius: 7px;
+
+            background: white;
+
+            color: var(--gray-900);
+
+            outline: none;
+        }
+
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: #6da2ca;
+
+            box-shadow:
+                0 0 0 3px
+                rgba(31,78,120,.10);
+        }
+
+
+        .table-wrap {
+            width: 100%;
+
+            overflow-x: auto;
+        }
+
+
+        .table {
+            width: 100%;
+
+            border-collapse: collapse;
+        }
+
+
+        .table th {
+            padding:
+                10px
+                9px;
+
+            background: #edf3f8;
+
+            border-bottom:
+                1px solid
+                var(--gray-300);
+
+            text-align: left;
+
+            white-space: nowrap;
+        }
+
+
+        .table td {
+            padding:
+                10px
+                9px;
+
+            border-bottom:
+                1px solid
+                var(--gray-200);
+
+            vertical-align: middle;
+        }
+
+
+        .muted {
+            color: var(--gray-500);
+
+            font-size: 12px;
+        }
+
+
+        /* ==================================================
+           FLASH
+        ================================================== */
+
+        .flash-container {
+            margin-bottom: 18px;
+        }
+
+
+        .alert {
+            margin-bottom: 10px;
+
+            padding:
+                11px
+                14px;
+
+            border-radius: 8px;
+
+            border: 1px solid transparent;
+        }
+
+
+        .alert-success {
+            color: #126b2d;
+
+            background: #eaf8ee;
+
+            border-color: #bce4c8;
+        }
+
+
+        .alert-danger {
+            color: #a31319;
+
+            background: #fdebed;
+
+            border-color: #f2bec1;
+        }
+
+
+        .alert-warning {
+            color: #865100;
+
+            background: #fff5df;
+
+            border-color: #eed595;
+        }
+
+
+        .alert-info {
+            color: #175a8c;
+
+            background: #eaf4fc;
+
+            border-color: #bfddf2;
+        }
+
+
+        /* ==================================================
+           BOTÓN MÓVIL
+        ================================================== */
+
+        .mobile-menu-button {
+            display: none;
+
+            width: 40px;
+            height: 40px;
+
+            align-items: center;
+            justify-content: center;
+
+            border: 0;
+
+            border-radius: 7px;
+
+            background: var(--primary);
+
+            color: white;
+
+            cursor: pointer;
+
+            font-size: 20px;
+        }
+
+
+        .sidebar-overlay {
+            display: none;
+
+            position: fixed;
+
+            inset: 0;
+
+            background:
+                rgba(0,0,0,.38);
+
+            z-index: 950;
+        }
+
+
+        /* ==================================================
+           RESPONSIVE
+        ================================================== */
+
+        @media (max-width: 760px) {
+
+            .sidebar {
+                transform:
+                    translateX(-100%);
+
+                transition:
+                    transform
+                    .20s ease;
+            }
+
+
+            .sidebar.open {
+                transform:
+                    translateX(0);
+            }
+
+
+            .sidebar-overlay.open {
+                display: block;
+            }
+
+
+            .main-wrapper {
+                margin-left: 0;
+            }
+
+
+            .mobile-menu-button {
+                display: inline-flex;
+            }
+
+
+            .topbar {
+                padding:
+                    11px
+                    14px;
+            }
+
+
+            .page-heading {
+                font-size: 19px;
+            }
+
+
+            .topbar-user {
+                display: none;
+            }
+
+
+            .page-content {
+                padding:
+                    16px
+                    12px
+                    35px;
+            }
+
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div
+    id="sidebarOverlay"
+    class="sidebar-overlay"
+    onclick="closeSidebar()"
+></div>
+
+
+<div class="app-shell">
+
+
+    <!-- ==================================================
+         SIDEBAR
+    =================================================== -->
+
+    <aside
+        id="sidebar"
+        class="sidebar"
+    >
+
+
+        <div class="sidebar-header">
+
+            <div class="sidebar-title">
+                Inventario
+            </div>
+
+            <div class="sidebar-subtitle">
+                Repuestos · Taller
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+
+            <!-- ==========================================
+                 PRINCIPAL
+            =========================================== -->
+
+            <div class="nav-section">
+                Principal
+            </div>
+
+
+            <a
+                href="{{ url_for('dashboard') }}"
+                class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
+            >
+                <span class="nav-icon">
+                    ▦
+                </span>
+
+                Dashboard
+            </a>
+
+
+            <!-- ==========================================
+                 VENTAS
+            =========================================== -->
+
+            <div class="nav-section">
+                Ventas
+            </div>
+
+
+            <a
+                href="{{ url_for('invoice_new') }}"
+                class="nav-link {% if request.endpoint == 'invoice_new' %}active{% endif %}"
+            >
+                <span class="nav-icon">
+                    ＋
+                </span>
+
+                Nueva remisión
+            </a>
+
+
+            <a
+                href="{{ url_for('invoices') }}"
+                class="nav-link
+                {% if request.endpoint in ['invoices', 'invoice_view', 'invoice_edit'] %}
+                    active
+                {% endif %}"
+            >
+                <span class="nav-icon">
+                    ▤
+                </span>
+
+                Remisiones
+            </a>
+
+
+            <a
+                href="{{ url_for('accounts_receivable') }}"
+                class="nav-link
+                {% if request.endpoint
+                      and
+                      (
+                          request.endpoint == 'accounts_receivable'
+                          or
+                          request.endpoint.startswith('accounts_receivable_')
+                      )
+                %}
+                    active
+                {% endif %}"
+            >
+                <span class="nav-icon">
+                    $
+                </span>
+
+                Cuentas por cobrar
+            </a>
+
+
+            <!-- ==========================================
+                 INVENTARIO
+            =========================================== -->
+
+            <div class="nav-section">
+                Inventario
+            </div>
+
+
+            <a
+                href="{{ url_for('products') }}"
+                class="nav-link
+                {% if request.endpoint in ['products', 'product_new', 'product_edit'] %}
+                    active
+                {% endif %}"
+            >
+                <span class="nav-icon">
+                    ▣
+                </span>
+
+                Productos
+            </a>
+
+
+            <a
+                href="{{ url_for('services') }}"
+                class="nav-link
+                {% if request.endpoint == 'services' %}
+                    active
+                {% endif %}"
+            >
+                <span class="nav-icon">
+                    ⚙
+                </span>
+
+                Servicios
+            </a>
+
+
+            {% if g.user and g.user["role"] == "administrador" %}
+
+                <a
+                    href="{{ url_for('movements') }}"
+                    class="nav-link
+                    {% if request.endpoint == 'movements' %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        ⇄
+                    </span>
+
+                    Movimientos
+                </a>
+
+
+                <!-- ======================================
+                     OBLIGACIONES
+                ======================================= -->
+
+                <div class="nav-section">
+                    Obligaciones
+                </div>
+
+
+                <a
+                    href="{{ url_for('accounts_payable') }}"
+                    class="nav-link
+                    {% if request.endpoint
+                          and
+                          (
+                              request.endpoint == 'accounts_payable'
+                              or
+                              request.endpoint.startswith('account_payable_')
+                          )
+                    %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        ◉
+                    </span>
+
+                    Facturas pendientes
+                </a>
+
+
+                <!-- ======================================
+                     ADMINISTRACIÓN
+                ======================================= -->
+
+                <div class="nav-section">
+                    Administración
+                </div>
+
+
+                <a
+                    href="{{ url_for('finances') }}"
+                    class="nav-link
+                    {% if request.endpoint == 'finances' %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        ▥
+                    </span>
+
+                    Finanzas
+                </a>
+
+
+                <a
+                    href="{{ url_for('salespeople') }}"
+                    class="nav-link
+                    {% if request.endpoint
+                          and
+                          (
+                              request.endpoint == 'salespeople'
+                              or
+                              request.endpoint.startswith('salesperson_')
+                          )
+                    %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        ♟
+                    </span>
+
+                    Vendedores
+                </a>
+
+
+                <a
+                    href="{{ url_for('users') }}"
+                    class="nav-link
+                    {% if request.endpoint
+                          and
+                          (
+                              request.endpoint == 'users'
+                              or
+                              request.endpoint.startswith('user_')
+                          )
+                    %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        ♙
+                    </span>
+
+                    Usuarios
+                </a>
+
+
+                <a
+                    href="{{ url_for('settings_view') }}"
+                    class="nav-link
+                    {% if request.endpoint == 'settings_view' %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        ⚙
+                    </span>
+
+                    Configuración
+                </a>
+
+
+                <a
+                    href="{{ url_for('backup') }}"
+                    class="nav-link"
+                >
+                    <span class="nav-icon">
+                        ↓
+                    </span>
+
+                    Descargar respaldo
+                </a>
+
+            {% endif %}
+
+
+        </nav>
+
+
+        <!-- ==================================================
+             USUARIO
+        =================================================== -->
+
+        <div class="sidebar-footer">
+
+            {% if g.user %}
+
+                <div class="sidebar-user-name">
+                    {{ g.user["full_name"] }}
+                </div>
+
+
+                <div class="sidebar-user-role">
+
+                    {% if g.user["role"] == "administrador" %}
+                        Administrador
+                    {% else %}
+                        Vendedor
+                    {% endif %}
+
+                </div>
+
+
+                <a
+                    href="{{ url_for('logout') }}"
+                    class="logout-link"
+                >
+                    Cerrar sesión
+                </a>
+
+            {% endif %}
+
+        </div>
+
+
+    </aside>
+
+
+    <!-- ==================================================
+         CONTENIDO
+    =================================================== -->
+
+    <main class="main-wrapper">
+
+
+        <header class="topbar">
+
+
+            <div class="topbar-left">
+
+                <button
+                    type="button"
+                    class="mobile-menu-button"
+                    onclick="toggleSidebar()"
+                    aria-label="Abrir menú"
+                >
+                    ☰
+                </button>
+
+
+                <h1 class="page-heading">
+                    {{ heading or 'Dashboard' }}
+                </h1>
+
+            </div>
+
+
+            {% if g.user %}
+
+                <div class="topbar-user">
+
+                    <strong>
+                        {{ g.user["full_name"] }}
+                    </strong>
+
+                    <br>
+
+                    {% if g.user["role"] == "administrador" %}
+                        Administrador
+                    {% else %}
+                        Vendedor
+                    {% endif %}
+
+                </div>
+
+            {% endif %}
+
+
+        </header>
+
+
+        <div class="page-content">
+
+
+            <!-- ==========================================
+                 MENSAJES FLASH
+            =========================================== -->
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+
+                {% if messages %}
+
+                    <div class="flash-container">
+
+                        {% for category, message in messages %}
+
+                            {% if category == 'success' %}
+
+                                <div class="alert alert-success">
+                                    {{ message }}
+                                </div>
+
+                            {% elif category == 'danger' %}
+
+                                <div class="alert alert-danger">
+                                    {{ message }}
+                                </div>
+
+                            {% elif category == 'warning' %}
+
+                                <div class="alert alert-warning">
+                                    {{ message }}
+                                </div>
+
+                            {% else %}
+
+                                <div class="alert alert-info">
+                                    {{ message }}
+                                </div>
+
+                            {% endif %}
+
+                        {% endfor %}
+
+                    </div>
+
+                {% endif %}
+
+            {% endwith %}
+
+
+            <!-- ==========================================
+                 CONTENIDO DEL TEMPLATE HIJO
+
+                 IMPORTANTE:
+                 Este es el ÚNICO block content del archivo.
+            =========================================== -->
+
+            {% block content %}
+            {% endblock %}
+
+
+        </div>
+
+
+    </main>
+
+
+</div>
+
+
+<script>
+
+function toggleSidebar() {
+
+    const sidebar =
+        document.getElementById(
+            'sidebar'
+        );
+
+    const overlay =
+        document.getElementById(
+            'sidebarOverlay'
+        );
+
+
+    if (!sidebar || !overlay) {
+        return;
+    }
+
+
+    sidebar.classList.toggle(
+        'open'
+    );
+
+    overlay.classList.toggle(
+        'open'
+    );
+
+}
+
+
+function closeSidebar() {
+
+    const sidebar =
+        document.getElementById(
+            'sidebar'
+        );
+
+    const overlay =
+        document.getElementById(
+            'sidebarOverlay'
+        );
+
+
+    if (sidebar) {
+        sidebar.classList.remove(
+            'open'
+        );
+    }
+
+
+    if (overlay) {
+        overlay.classList.remove(
+            'open'
+        );
+    }
+
+}
+
+
+document.addEventListener(
+    'click',
+    function(event) {
+
+        const link =
+            event.target.closest(
+                '.nav-link'
+            );
+
+
+        if (
+            link
+            &&
+            window.innerWidth <= 760
+        ) {
+
+            closeSidebar();
+
+        }
+
+    }
+);
+
+</script>
+
+
+</body>
+
+</html>

@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+
+{% set heading='Historial de factura pendiente' %}
+
+{% block content %}
+
+<style>
+
+.status-box {
+    display:inline-block;
+    padding:8px 13px;
+    border-radius:999px;
+    font-weight:700;
+}
+
+.status-green {
+    background:#e9f8ed;
+    color:#126c2e;
+}
+
+.status-orange {
+    background:#fff1df;
+    color:#9a5200;
+}
+
+.status-red {
+    background:#fde9ea;
+    color:#a31217;
+}
+
+.status-paid {
+    background:#edf2f4;
+    color:#35505d;
+}
+
+</style>
+
+
+<div class="card">
+
+    <h3>
+        {{ account.supplier }}
+    </h3>
+
+
+    <div class="form-grid">
+
+        <div>
+
+            <div class="muted">
+                Número de factura
+            </div>
+
+            <strong>
+                {{ account.invoice_number }}
+            </strong>
+
+        </div>
+
+
+        <div>
+
+            <div class="muted">
+                Fecha de compra
+            </div>
+
+            <strong>
+                {{ account.purchase_date|string|truncate(10, True, '') }}
+            </strong>
+
+        </div>
+
+
+        <div>
+
+            <div class="muted">
+                Fecha límite
+            </div>
+
+            <strong>
+                {{ account.due_date|string|truncate(10, True, '') }}
+            </strong>
+
+        </div>
+
+
+        <div>
+
+            <div class="muted">
+                Valor original
+            </div>
+
+            <strong>
+                {{ account.original_amount|money }}
+            </strong>
+
+        </div>
+
+
+        <div>
+
+            <div class="muted">
+                Total pagado
+            </div>
+
+            <strong>
+                {{ total_paid|money }}
+            </strong>
+
+        </div>
+
+
+        <div>
+
+            <div class="muted">
+                Saldo
+            </div>
+
+            <strong>
+                {{ balance|money }}
+            </strong>
+
+        </div>
+
+    </div>
+
+
+    <div style="margin-top:18px;">
+
+        {% if account.display_status == 'PENDIENTE' %}
+
+            <span class="status-box status-green">
+                🟢 PENDIENTE
+            </span>
+
+        {% elif account.display_status == 'PROXIMA A VENCER' %}
+
+            <span class="status-box status-orange">
+                🟠 PRÓXIMA A VENCER
+            </span>
+
+        {% elif account.display_status == 'VENCIDA' %}
+
+            <span class="status-box status-red">
+                🔴 VENCIDA
+            </span>
+
+        {% else %}
+
+            <span class="status-box status-paid">
+                PAGADA
+            </span>
+
+        {% endif %}
+
+    </div>
+
+
+    {% if account.description %}
+
+        <p>
+            <strong>Concepto:</strong>
+            {{ account.description }}
+        </p>
+
+    {% endif %}
+
+
+    {% if account.notes %}
+
+        <p>
+            <strong>Observaciones:</strong>
+            {{ account.notes }}
+        </p>
+
+    {% endif %}
+
+</div>
+
+
+<div class="card">
+
+    <h3>
+        Historial de pagos
+    </h3>
+
+
+    {% if payments %}
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Valor</th>
+                        <th>Forma de pago</th>
+                        <th>Observaciones</th>
+                        <th>Registrado por</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for payment in payments %}
+
+                        <tr>
+
+                            <td>
+                                {{ payment.payment_date|string|truncate(10, True, '') }}
+                            </td>
+
+                            <td>
+                                <strong>
+                                    {{ payment.amount|money }}
+                                </strong>
+                            </td>
+
+                            <td>
+                                {{ payment.payment_method }}
+                            </td>
+
+                            <td>
+                                {{ payment.notes or '-' }}
+                            </td>
+
+                            <td>
+                                {{ payment.user_name or '-' }}
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p class="muted">
+            Todavía no hay pagos registrados.
+        </p>
+
+    {% endif %}
+
+
+    <div class="actions">
+
+        <a
+            class="btn btn-light"
+            href="{{ url_for('accounts_payable') }}"
+        >
+            Volver
+        </a>
+
+    </div>
+
+</div>
+
+{% endblock %}

@@ -187,6 +187,130 @@ class AccountReceivablePayment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
 
+class AccountPayable(db.Model):
+    __tablename__ = "accounts_payable"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    supplier = db.Column(
+        db.String(250),
+        nullable=False
+    )
+
+    invoice_number = db.Column(
+        db.String(120),
+        nullable=False
+    )
+
+    purchase_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    due_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    original_amount = db.Column(
+        db.Numeric(16, 2),
+        nullable=False,
+        default=0
+    )
+
+    description = db.Column(
+        db.String(500),
+        default=""
+    )
+
+    notes = db.Column(
+        db.Text,
+        default=""
+    )
+
+    status = db.Column(
+        db.String(30),
+        nullable=False,
+        default="PENDIENTE",
+        server_default=text("'PENDIENTE'")
+    )
+
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        server_default=func.now()
+    )
+
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        server_default=func.now()
+    )
+
+    closed_at = db.Column(
+        db.DateTime,
+        nullable=True
+    )
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id")
+    )
+
+
+class AccountPayablePayment(db.Model):
+    __tablename__ = "accounts_payable_payments"
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    payable_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            "accounts_payable.id",
+            ondelete="CASCADE"
+        ),
+        nullable=False
+    )
+
+    amount = db.Column(
+        db.Numeric(16, 2),
+        nullable=False
+    )
+
+    payment_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    payment_method = db.Column(
+        db.String(80),
+        nullable=False,
+        default="Transferencia"
+    )
+
+    notes = db.Column(
+        db.Text,
+        default=""
+    )
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id")
+    )
+
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        server_default=func.now()
+    )
+
 
 class Movement(db.Model):
     __tablename__ = "movements"
@@ -277,7 +401,8 @@ class CompatConnection:
         if insert_match and insert_match.group(1) in {
             "users", "products", "customers", "salespeople", "invoices", "invoice_items",
             "services", "invoice_service_items", "movements",
-            "accounts_receivable", "accounts_receivable_payments"
+            "accounts_receivable", "accounts_receivable_payments",
+            "accounts_payable", "accounts_payable_payments"
         } and " returning " not in lower and self.dialect == "postgresql":
             named_sql += " RETURNING id"
             result = self.connection.execute(text(named_sql), bind)
@@ -309,5 +434,5 @@ __all__ = [
     "db", "db_conn", "IntegrityError", "BASE_DIR", "LOCAL_DB_PATH", "database_url",
     "User", "Setting", "Product", "Customer", "Salesperson", "Invoice", "InvoiceItem",
     "Service", "InvoiceServiceItem", "Movement", "AccountReceivable",
-    "AccountReceivablePayment",
+    "AccountReceivablePayment","AccountPayable","AccountPayablePayment",
 ]

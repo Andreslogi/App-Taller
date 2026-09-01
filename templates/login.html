@@ -1,4 +1,307 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Iniciar sesión</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body>
-<div class="login-page"><div class="login-card"><h1>Inventario y Remisiones</h1><p>Ingresa con tu usuario.</p>
-{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
-<form method="post"><label>Usuario</label><input name="username" required autofocus><label>Contraseña</label><input type="password" name="password" required><button class="btn btn-primary" type="submit">Ingresar</button></form></div></div></body></html>
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Iniciar sesión
+    </title>
+
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+
+        body {
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Roboto,
+                Arial,
+                sans-serif;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #edf4f9,
+                    #dceaf5
+                );
+
+            color: #1e293b;
+        }
+
+
+        .login-page {
+            min-height: 100vh;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            padding: 20px;
+        }
+
+
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+
+            padding: 32px;
+
+            background: white;
+
+            border-radius: 14px;
+
+            box-shadow:
+                0 15px 45px
+                rgba(15, 23, 42, .13);
+        }
+
+
+        .login-card h1 {
+            margin:
+                0
+                0
+                6px;
+
+            color: #173f63;
+
+            font-size: 26px;
+        }
+
+
+        .login-card p {
+            margin:
+                0
+                0
+                24px;
+
+            color: #64748b;
+
+            font-size: 14px;
+        }
+
+
+        .login-card label {
+            display: block;
+
+            margin:
+                14px
+                0
+                6px;
+
+            font-size: 13px;
+            font-weight: 700;
+
+            color: #334155;
+        }
+
+
+        .login-card input {
+            width: 100%;
+
+            padding:
+                11px
+                12px;
+
+            border:
+                1px solid
+                #cbd5e1;
+
+            border-radius: 7px;
+
+            outline: none;
+        }
+
+
+        .login-card input:focus {
+            border-color: #4e83ad;
+
+            box-shadow:
+                0 0 0 3px
+                rgba(31, 78, 120, .10);
+        }
+
+
+        .login-card button {
+            width: 100%;
+
+            margin-top: 21px;
+
+            padding:
+                11px
+                15px;
+
+            border: 0;
+
+            border-radius: 7px;
+
+            background: #1f4e78;
+
+            color: white;
+
+            cursor: pointer;
+
+            font-weight: 700;
+        }
+
+
+        .login-card button:hover {
+            background: #173f63;
+        }
+
+
+        .alert {
+            margin-bottom: 12px;
+
+            padding:
+                10px
+                12px;
+
+            border-radius: 7px;
+
+            font-size: 13px;
+        }
+
+
+        .alert-success {
+            background: #eaf8ee;
+            color: #126b2d;
+        }
+
+
+        .alert-danger {
+            background: #fdebed;
+            color: #a31319;
+        }
+
+
+        .alert-warning {
+            background: #fff5df;
+            color: #865100;
+        }
+
+
+        .alert-info {
+            background: #eaf4fc;
+            color: #175a8c;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="login-page">
+
+
+    <div class="login-card">
+
+
+        <h1>
+            Inventario y Remisiones
+        </h1>
+
+
+        <p>
+            Ingresa con tu usuario para continuar.
+        </p>
+
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+
+            {% if messages %}
+
+                {% for category, message in messages %}
+
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+
+                {% endfor %}
+
+            {% endif %}
+
+        {% endwith %}
+
+
+        <form method="post">
+
+
+            <label for="username">
+                Usuario
+            </label>
+
+            <input
+                id="username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                required
+                autofocus
+            >
+
+
+            <label for="password">
+                Contraseña
+            </label>
+
+            <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+            >
+
+
+            <button
+                type="submit"
+                class="btn btn-primary"
+            >
+                Ingresar
+            </button>
+
+
+        </form>
+
+
+    </div>
+
+
+</div>
+
+
+</body>
+
+</html>

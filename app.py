@@ -1846,6 +1846,1394 @@ def accounts_receivable_history(account_id: int):
         balance=balance,
     )
 
+# ============================================================
+# CUENTAS POR PAGAR / FACTURAS PENDIENTES
+# ============================================================
+
+
+def _parse_payable_date(value):
+    """Convierte distintos formatos devueltos por SQLite/PostgreSQL a date."""
+
+    if not value:
+        return None
+
+    if hasattr(value, "date") and not isinstance(value, str):
+        try:
+            return value.date()
+        except Exception:
+            pass
+
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(
+                value[:10],
+                "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            return None
+
+    return value
+
+
+def _payable_display_status(row, today=None):
+    """
+    Estado visual tipo semáforo.
+
+    PAGADA             -> pago completo
+    VENCIDA            -> fecha límite ya pasó
+    PROXIMA A VENCER   -> faltan entre 0 y 7 días
+    PENDIENTE          -> faltan más de 7 días
+    """
+
+    today = today or datetime.now().date()
+
+    original_amount = Decimal(
+        str(
+            row.get(
+                "original_amount"
+            )
+            or
+            0
+        )
+    )
+
+    paid_amount = Decimal(
+        str(
+            row.get(
+                "paid_amount"
+            )
+            or
+            0
+        )
+    )
+
+    balance = (
+        original_amount
+        -
+        paid_amount
+    )
+
+    if balance <= Decimal("0"):
+        return "PAGADA"
+
+    due_date = _parse_payable_date(
+        row.get(
+            "due_date"
+        )
+    )
+
+    if not due_date:
+        return "PENDIENTE"
+
+    days_remaining = (
+        due_date
+        -
+        today
+    ).days
+
+    if days_remaining < 0:
+        return "VENCIDA"
+
+    if days_remaining <= 7:
+        return "PROXIMA A VENCER"
+
+    return "PENDIENTE"
+
+
+def _payable_days_remaining(row, today=None):
+
+    today = today or datetime.now().date()
+
+    due_date = _parse_payable_date(
+        row.get(
+            "due_date"
+        )
+    )
+
+    if not due_date:
+        return None
+
+    return (
+        due_date
+        -
+        today
+    ).days
+
+
+# ============================================================
+# LISTADO
+# ============================================================
+
+@app.route("/facturas-pendientes")
+@role_required("administrador")
+def accounts_payable():
+
+    status_filter = (
+        request.args.get(
+            "status",
+            "ABIERTAS"
+        )
+        .strip()
+        .upper()
+    )
+
+    q = (
+        request.args.get(
+            "q",
+            ""
+        )
+        .strip()
+    )
+
+    with db_conn() as conn:
+
+        rows = conn.execute(
+            """
+            SELECT
+                ap.*,
+
+                COALESCE(
+                    (
+                        SELECT SUM(p.amount)
+                        FROM accounts_payable_payments p
+                        WHERE p.payable_id = ap.id
+                    ),
+                    0
+                ) AS paid_amount
+
+            FROM accounts_payable ap
+
+            ORDER BY
+                ap.due_date ASC,
+                ap.id DESC
+            """
+        ).fetchall()
+
+
+    accounts = []
+
+    total_open = Decimal("0")
+    total_pending = Decimal("0")
+    total_upcoming = Decimal("0")
+    total_overdue = Decimal("0")
+
+    count_pending = 0
+    count_upcoming = 0
+    count_overdue = 0
+
+    q_lower = q.lower()
+
+
+    for row in rows:
+
+        account = dict(row)
+
+        original_amount = Decimal(
+            str(
+                account.get(
+                    "original_amount"
+                )
+                or
+                0
+            )
+        )
+
+        paid_amount = Decimal(
+            str(
+                account.get(
+                    "paid_amount"
+                )
+                or
+                0
+            )
+        )
+
+        balance = max(
+            Decimal("0"),
+            original_amount
+            -
+            paid_amount
+        )
+
+        display_status = (
+            _payable_display_status(
+                account
+            )
+        )
+
+        days_remaining = (
+            _payable_days_remaining(
+                account
+            )
+        )
+
+
+        account["paid_amount"] = (
+            paid_amount
+        )
+
+        account["balance"] = (
+            balance
+        )
+
+        account["display_status"] = (
+            display_status
+        )
+
+        account["days_remaining"] = (
+            days_remaining
+        )
+
+
+        if balance > 0:
+
+            total_open += balance
+
+            if display_status == "PENDIENTE":
+
+                total_pending += balance
+                count_pending += 1
+
+            elif display_status == "PROXIMA A VENCER":
+
+                total_upcoming += balance
+                count_upcoming += 1
+
+            elif display_status == "VENCIDA":
+
+                total_overdue += balance
+                count_overdue += 1
+
+
+        # Buscador
+        if q_lower:
+
+            searchable = " ".join(
+                str(
+                    account.get(key)
+                    or
+                    ""
+                )
+                for key in (
+                    "supplier",
+                    "invoice_number",
+                    "description",
+                    "notes",
+                )
+            ).lower()
+
+            if q_lower not in searchable:
+                continue
+
+
+        # Filtros
+        if (
+            status_filter == "ABIERTAS"
+            and
+            display_status == "PAGADA"
+        ):
+            continue
+
+
+        if (
+            status_filter
+            not in (
+                "",
+                "TODAS",
+                "ABIERTAS"
+            )
+            and
+            display_status
+            !=
+            status_filter
+        ):
+            continue
+
+
+        accounts.append(
+            account
+        )
+
+
+    return render_template(
+        "accounts_payable.html",
+
+        accounts=accounts,
+
+        status_filter=status_filter,
+
+        q=q,
+
+        total_open=total_open,
+
+        total_pending=total_pending,
+
+        total_upcoming=total_upcoming,
+
+        total_overdue=total_overdue,
+
+        count_pending=count_pending,
+
+        count_upcoming=count_upcoming,
+
+        count_overdue=count_overdue,
+    )
+
+
+# ============================================================
+# CREAR FACTURA
+# ============================================================
+
+@app.route(
+    "/facturas-pendientes/nueva",
+    methods=["GET", "POST"]
+)
+@role_required("administrador")
+def account_payable_new():
+
+    if request.method == "POST":
+
+        try:
+
+            supplier = (
+                request.form.get(
+                    "supplier",
+                    ""
+                )
+                .strip()
+            )
+
+            invoice_number = (
+                request.form.get(
+                    "invoice_number",
+                    ""
+                )
+                .strip()
+            )
+
+            purchase_date_raw = (
+                request.form.get(
+                    "purchase_date",
+                    ""
+                )
+                .strip()
+            )
+
+            due_date_raw = (
+                request.form.get(
+                    "due_date",
+                    ""
+                )
+                .strip()
+            )
+
+            amount = parse_decimal(
+                request.form.get(
+                    "original_amount",
+                    "0"
+                )
+            )
+
+            description = (
+                request.form.get(
+                    "description",
+                    ""
+                )
+                .strip()
+            )
+
+            notes = (
+                request.form.get(
+                    "notes",
+                    ""
+                )
+                .strip()
+            )
+
+
+            if not supplier:
+
+                raise ValueError(
+                    "El proveedor es obligatorio."
+                )
+
+
+            if not invoice_number:
+
+                raise ValueError(
+                    "El número de factura es obligatorio."
+                )
+
+
+            if not purchase_date_raw:
+
+                raise ValueError(
+                    "La fecha de compra es obligatoria."
+                )
+
+
+            if not due_date_raw:
+
+                raise ValueError(
+                    "La fecha límite de pago es obligatoria."
+                )
+
+
+            try:
+
+                purchase_date = datetime.strptime(
+                    purchase_date_raw,
+                    "%Y-%m-%d"
+                ).date()
+
+            except ValueError as exc:
+
+                raise ValueError(
+                    "La fecha de compra no es válida."
+                ) from exc
+
+
+            try:
+
+                due_date = datetime.strptime(
+                    due_date_raw,
+                    "%Y-%m-%d"
+                ).date()
+
+            except ValueError as exc:
+
+                raise ValueError(
+                    "La fecha límite de pago no es válida."
+                ) from exc
+
+
+            if due_date < purchase_date:
+
+                raise ValueError(
+                    "La fecha límite de pago no puede ser anterior a la fecha de compra."
+                )
+
+
+            if amount <= Decimal("0"):
+
+                raise ValueError(
+                    "El valor de la factura debe ser mayor a cero."
+                )
+
+
+            with db_conn() as conn:
+
+                duplicate = conn.execute(
+                    """
+                    SELECT id
+                    FROM accounts_payable
+                    WHERE LOWER(supplier)=LOWER(?)
+                    AND LOWER(invoice_number)=LOWER(?)
+                    """,
+                    (
+                        supplier,
+                        invoice_number
+                    )
+                ).fetchone()
+
+
+                if duplicate:
+
+                    raise ValueError(
+                        "Ya existe una factura con ese número para este proveedor."
+                    )
+
+
+                conn.execute(
+                    """
+                    INSERT INTO accounts_payable(
+                        supplier,
+                        invoice_number,
+                        purchase_date,
+                        due_date,
+                        original_amount,
+                        description,
+                        notes,
+                        status,
+                        user_id,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES(
+                        ?,?,?,?,?,?,?,?,
+                        ?,?,?
+                    )
+                    """,
+                    (
+                        supplier,
+                        invoice_number,
+                        purchase_date,
+                        due_date,
+                        float(amount),
+                        description,
+                        notes,
+                        "PENDIENTE",
+                        g.user["id"],
+                        datetime.now().isoformat(
+                            timespec="seconds"
+                        ),
+                        datetime.now().isoformat(
+                            timespec="seconds"
+                        ),
+                    )
+                )
+
+
+            flash(
+                "Factura pendiente registrada correctamente.",
+                "success"
+            )
+
+            return redirect(
+                url_for(
+                    "accounts_payable"
+                )
+            )
+
+
+        except ValueError as exc:
+
+            flash(
+                str(exc),
+                "danger"
+            )
+
+
+    return render_template(
+        "account_payable_form.html",
+        account=None
+    )
+
+
+# ============================================================
+# EDITAR FACTURA
+# ============================================================
+
+@app.route(
+    "/facturas-pendientes/<int:account_id>/editar",
+    methods=["GET", "POST"]
+)
+@role_required("administrador")
+def account_payable_edit(account_id):
+
+    with db_conn() as conn:
+
+        account = conn.execute(
+            """
+            SELECT ap.*,
+
+                   COALESCE(
+                       (
+                           SELECT SUM(p.amount)
+                           FROM accounts_payable_payments p
+                           WHERE p.payable_id=ap.id
+                       ),
+                       0
+                   ) AS paid_amount
+
+            FROM accounts_payable ap
+
+            WHERE ap.id=?
+            """,
+            (
+                account_id,
+            )
+        ).fetchone()
+
+
+    if not account:
+
+        flash(
+            "Factura pendiente no encontrada.",
+            "danger"
+        )
+
+        return redirect(
+            url_for(
+                "accounts_payable"
+            )
+        )
+
+
+    if request.method == "POST":
+
+        try:
+
+            supplier = (
+                request.form.get(
+                    "supplier",
+                    ""
+                )
+                .strip()
+            )
+
+            invoice_number = (
+                request.form.get(
+                    "invoice_number",
+                    ""
+                )
+                .strip()
+            )
+
+            purchase_date_raw = (
+                request.form.get(
+                    "purchase_date",
+                    ""
+                )
+                .strip()
+            )
+
+            due_date_raw = (
+                request.form.get(
+                    "due_date",
+                    ""
+                )
+                .strip()
+            )
+
+            amount = parse_decimal(
+                request.form.get(
+                    "original_amount",
+                    "0"
+                )
+            )
+
+            description = (
+                request.form.get(
+                    "description",
+                    ""
+                )
+                .strip()
+            )
+
+            notes = (
+                request.form.get(
+                    "notes",
+                    ""
+                )
+                .strip()
+            )
+
+
+            if not supplier:
+                raise ValueError(
+                    "El proveedor es obligatorio."
+                )
+
+
+            if not invoice_number:
+                raise ValueError(
+                    "El número de factura es obligatorio."
+                )
+
+
+            try:
+
+                purchase_date = datetime.strptime(
+                    purchase_date_raw,
+                    "%Y-%m-%d"
+                ).date()
+
+                due_date = datetime.strptime(
+                    due_date_raw,
+                    "%Y-%m-%d"
+                ).date()
+
+            except ValueError as exc:
+
+                raise ValueError(
+                    "Las fechas ingresadas no son válidas."
+                ) from exc
+
+
+            if due_date < purchase_date:
+
+                raise ValueError(
+                    "La fecha límite no puede ser anterior a la fecha de compra."
+                )
+
+
+            if amount <= 0:
+
+                raise ValueError(
+                    "El valor de la factura debe ser mayor a cero."
+                )
+
+
+            paid_amount = Decimal(
+                str(
+                    account.get(
+                        "paid_amount"
+                    )
+                    or
+                    0
+                )
+            )
+
+
+            if amount < paid_amount:
+
+                raise ValueError(
+                    "El valor de la factura no puede ser menor al valor que ya fue pagado."
+                )
+
+
+            with db_conn() as conn:
+
+                duplicate = conn.execute(
+                    """
+                    SELECT id
+                    FROM accounts_payable
+
+                    WHERE LOWER(supplier)=LOWER(?)
+                    AND LOWER(invoice_number)=LOWER(?)
+                    AND id<>?
+                    """,
+                    (
+                        supplier,
+                        invoice_number,
+                        account_id
+                    )
+                ).fetchone()
+
+
+                if duplicate:
+
+                    raise ValueError(
+                        "Ya existe otra factura con ese número para este proveedor."
+                    )
+
+
+                balance = (
+                    amount
+                    -
+                    paid_amount
+                )
+
+
+                new_status = (
+                    "PAGADA"
+                    if balance <= 0
+                    else
+                    (
+                        "PAGO PARCIAL"
+                        if paid_amount > 0
+                        else
+                        "PENDIENTE"
+                    )
+                )
+
+
+                closed_at = (
+                    datetime.now().isoformat(
+                        timespec="seconds"
+                    )
+                    if new_status == "PAGADA"
+                    else
+                    None
+                )
+
+
+                conn.execute(
+                    """
+                    UPDATE accounts_payable
+
+                    SET
+                        supplier=?,
+                        invoice_number=?,
+                        purchase_date=?,
+                        due_date=?,
+                        original_amount=?,
+                        description=?,
+                        notes=?,
+                        status=?,
+                        closed_at=?,
+                        updated_at=CURRENT_TIMESTAMP
+
+                    WHERE id=?
+                    """,
+                    (
+                        supplier,
+                        invoice_number,
+                        purchase_date,
+                        due_date,
+                        float(amount),
+                        description,
+                        notes,
+                        new_status,
+                        closed_at,
+                        account_id
+                    )
+                )
+
+
+            flash(
+                "Factura actualizada correctamente.",
+                "success"
+            )
+
+            return redirect(
+                url_for(
+                    "accounts_payable"
+                )
+            )
+
+
+        except ValueError as exc:
+
+            flash(
+                str(exc),
+                "danger"
+            )
+
+
+    return render_template(
+        "account_payable_form.html",
+        account=account
+    )
+
+
+# ============================================================
+# PAGO PARCIAL
+# ============================================================
+
+@app.route(
+    "/facturas-pendientes/<int:account_id>/pago",
+    methods=["POST"]
+)
+@role_required("administrador")
+def account_payable_payment(account_id):
+
+    try:
+
+        amount = parse_decimal(
+            request.form.get(
+                "amount",
+                "0"
+            )
+        )
+
+        payment_method = (
+            request.form.get(
+                "payment_method",
+                "Transferencia"
+            )
+            .strip()
+            or
+            "Transferencia"
+        )
+
+        payment_date_raw = (
+            request.form.get(
+                "payment_date",
+                ""
+            )
+            .strip()
+        )
+
+        notes = (
+            request.form.get(
+                "notes",
+                ""
+            )
+            .strip()
+        )
+
+
+        if amount <= 0:
+
+            raise ValueError(
+                "El valor del pago debe ser mayor a cero."
+            )
+
+
+        if payment_date_raw:
+
+            try:
+
+                payment_date = datetime.strptime(
+                    payment_date_raw,
+                    "%Y-%m-%d"
+                ).date()
+
+            except ValueError as exc:
+
+                raise ValueError(
+                    "La fecha del pago no es válida."
+                ) from exc
+
+        else:
+
+            payment_date = (
+                datetime.now().date()
+            )
+
+
+        with db_conn() as conn:
+
+            account = conn.execute(
+                """
+                SELECT
+                    ap.*,
+
+                    COALESCE(
+                        (
+                            SELECT SUM(p.amount)
+                            FROM accounts_payable_payments p
+                            WHERE p.payable_id=ap.id
+                        ),
+                        0
+                    ) AS paid_amount
+
+                FROM accounts_payable ap
+
+                WHERE ap.id=?
+                """,
+                (
+                    account_id,
+                )
+            ).fetchone()
+
+
+            if not account:
+
+                raise ValueError(
+                    "La factura pendiente no existe."
+                )
+
+
+            original = Decimal(
+                str(
+                    account["original_amount"]
+                    or
+                    0
+                )
+            )
+
+            already_paid = Decimal(
+                str(
+                    account["paid_amount"]
+                    or
+                    0
+                )
+            )
+
+            balance = (
+                original
+                -
+                already_paid
+            )
+
+
+            if balance <= 0:
+
+                raise ValueError(
+                    "Esta factura ya se encuentra pagada."
+                )
+
+
+            if amount > balance:
+
+                raise ValueError(
+                    f"El pago supera el saldo pendiente de {money(balance)}."
+                )
+
+
+            conn.execute(
+                """
+                INSERT INTO accounts_payable_payments(
+                    payable_id,
+                    amount,
+                    payment_date,
+                    payment_method,
+                    notes,
+                    user_id
+                )
+                VALUES(?,?,?,?,?,?)
+                """,
+                (
+                    account_id,
+                    float(amount),
+                    payment_date,
+                    payment_method,
+                    notes,
+                    g.user["id"]
+                )
+            )
+
+
+            new_balance = (
+                balance
+                -
+                amount
+            )
+
+
+            new_status = (
+                "PAGADA"
+                if new_balance <= 0
+                else
+                "PAGO PARCIAL"
+            )
+
+
+            closed_at = (
+                datetime.now().isoformat(
+                    timespec="seconds"
+                )
+                if new_balance <= 0
+                else
+                None
+            )
+
+
+            conn.execute(
+                """
+                UPDATE accounts_payable
+                SET
+                    status=?,
+                    closed_at=?,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (
+                    new_status,
+                    closed_at,
+                    account_id
+                )
+            )
+
+
+        flash(
+            "Pago registrado correctamente.",
+            "success"
+        )
+
+
+    except ValueError as exc:
+
+        flash(
+            str(exc),
+            "danger"
+        )
+
+
+    return redirect(
+        url_for(
+            "accounts_payable"
+        )
+    )
+
+
+# ============================================================
+# PAGAR TODO
+# ============================================================
+
+@app.route(
+    "/facturas-pendientes/<int:account_id>/pagar-total",
+    methods=["POST"]
+)
+@role_required("administrador")
+def account_payable_pay_full(account_id):
+
+    try:
+
+        payment_method = (
+            request.form.get(
+                "payment_method",
+                "Transferencia"
+            )
+            .strip()
+            or
+            "Transferencia"
+        )
+
+        payment_date_raw = (
+            request.form.get(
+                "payment_date",
+                ""
+            )
+            .strip()
+        )
+
+        notes = (
+            request.form.get(
+                "notes",
+                ""
+            )
+            .strip()
+            or
+            "Pago total de factura"
+        )
+
+
+        if payment_date_raw:
+
+            payment_date = datetime.strptime(
+                payment_date_raw,
+                "%Y-%m-%d"
+            ).date()
+
+        else:
+
+            payment_date = (
+                datetime.now().date()
+            )
+
+
+        with db_conn() as conn:
+
+            account = conn.execute(
+                """
+                SELECT
+                    ap.*,
+
+                    COALESCE(
+                        (
+                            SELECT SUM(p.amount)
+                            FROM accounts_payable_payments p
+                            WHERE p.payable_id=ap.id
+                        ),
+                        0
+                    ) AS paid_amount
+
+                FROM accounts_payable ap
+
+                WHERE ap.id=?
+                """,
+                (
+                    account_id,
+                )
+            ).fetchone()
+
+
+            if not account:
+
+                raise ValueError(
+                    "Factura pendiente no encontrada."
+                )
+
+
+            original = Decimal(
+                str(
+                    account["original_amount"]
+                    or
+                    0
+                )
+            )
+
+            already_paid = Decimal(
+                str(
+                    account["paid_amount"]
+                    or
+                    0
+                )
+            )
+
+            balance = (
+                original
+                -
+                already_paid
+            )
+
+
+            if balance > 0:
+
+                conn.execute(
+                    """
+                    INSERT INTO accounts_payable_payments(
+                        payable_id,
+                        amount,
+                        payment_date,
+                        payment_method,
+                        notes,
+                        user_id
+                    )
+                    VALUES(?,?,?,?,?,?)
+                    """,
+                    (
+                        account_id,
+                        float(balance),
+                        payment_date,
+                        payment_method,
+                        notes,
+                        g.user["id"]
+                    )
+                )
+
+
+            conn.execute(
+                """
+                UPDATE accounts_payable
+
+                SET
+                    status='PAGADA',
+                    closed_at=?,
+                    updated_at=CURRENT_TIMESTAMP
+
+                WHERE id=?
+                """,
+                (
+                    datetime.now().isoformat(
+                        timespec="seconds"
+                    ),
+                    account_id
+                )
+            )
+
+
+        flash(
+            "Factura marcada como pagada.",
+            "success"
+        )
+
+
+    except ValueError as exc:
+
+        flash(
+            str(exc),
+            "danger"
+        )
+
+
+    return redirect(
+        url_for(
+            "accounts_payable"
+        )
+    )
+
+
+# ============================================================
+# HISTORIAL
+# ============================================================
+
+@app.route(
+    "/facturas-pendientes/<int:account_id>/historial"
+)
+@role_required("administrador")
+def account_payable_history(account_id):
+
+    with db_conn() as conn:
+
+        account = conn.execute(
+            """
+            SELECT ap.*,
+
+                   COALESCE(
+                       (
+                           SELECT SUM(p.amount)
+                           FROM accounts_payable_payments p
+                           WHERE p.payable_id=ap.id
+                       ),
+                       0
+                   ) AS paid_amount
+
+            FROM accounts_payable ap
+
+            WHERE ap.id=?
+            """,
+            (
+                account_id,
+            )
+        ).fetchone()
+
+
+        payments = conn.execute(
+            """
+            SELECT
+                p.*,
+                u.full_name AS user_name
+
+            FROM accounts_payable_payments p
+
+            LEFT JOIN users u
+                ON u.id=p.user_id
+
+            WHERE p.payable_id=?
+
+            ORDER BY
+                p.payment_date DESC,
+                p.id DESC
+            """,
+            (
+                account_id,
+            )
+        ).fetchall()
+
+
+    if not account:
+
+        flash(
+            "Factura pendiente no encontrada.",
+            "danger"
+        )
+
+        return redirect(
+            url_for(
+                "accounts_payable"
+            )
+        )
+
+
+    account = dict(
+        account
+    )
+
+
+    original = Decimal(
+        str(
+            account.get(
+                "original_amount"
+            )
+            or
+            0
+        )
+    )
+
+
+    paid = Decimal(
+        str(
+            account.get(
+                "paid_amount"
+            )
+            or
+            0
+        )
+    )
+
+
+    balance = max(
+        Decimal("0"),
+        original
+        -
+        paid
+    )
+
+
+    account["balance"] = (
+        balance
+    )
+
+    account["display_status"] = (
+        _payable_display_status(
+            account
+        )
+    )
+
+
+    return render_template(
+        "account_payable_history.html",
+        account=account,
+        payments=payments,
+        total_paid=paid,
+        balance=balance,
+    )
+
 
 @app.route("/facturas/<int:invoice_id>")
 @login_required

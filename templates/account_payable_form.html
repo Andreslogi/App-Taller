@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+
+{% if account %}
+    {% set heading='Editar factura pendiente' %}
+{% else %}
+    {% set heading='Registrar factura pendiente' %}
+{% endif %}
+
+{% block content %}
+
+<div class="card">
+
+    <form
+        method="post"
+        id="payableForm"
+    >
+
+        <div class="form-grid">
+
+
+            <div class="form-group">
+
+                <label>
+                    Proveedor *
+                </label>
+
+                <input
+                    type="text"
+                    name="supplier"
+                    value="{% if account %}{{ account.supplier }}{% else %}{{ request.form.get('supplier', '') }}{% endif %}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Número de factura *
+                </label>
+
+                <input
+                    type="text"
+                    name="invoice_number"
+                    value="{% if account %}{{ account.invoice_number }}{% else %}{{ request.form.get('invoice_number', '') }}{% endif %}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Fecha de compra *
+                </label>
+
+                <input
+                    type="date"
+                    name="purchase_date"
+                    id="purchase_date"
+                    value="{% if account %}{{ account.purchase_date|string|truncate(10, True, '') }}{% else %}{{ request.form.get('purchase_date', '') }}{% endif %}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Fecha límite de pago *
+                </label>
+
+                <input
+                    type="date"
+                    name="due_date"
+                    id="due_date"
+                    value="{% if account %}{{ account.due_date|string|truncate(10, True, '') }}{% else %}{{ request.form.get('due_date', '') }}{% endif %}"
+                    required
+                >
+
+                <div class="muted">
+                    Se sugieren 30 días después de la compra, pero puedes modificarla.
+                </div>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Valor total de la factura *
+                </label>
+
+                <input
+                    type="number"
+                    name="original_amount"
+                    min="1"
+                    step="1"
+                    value="{% if account %}{{ account.original_amount|int }}{% else %}{{ request.form.get('original_amount', '') }}{% endif %}"
+                    required
+                >
+
+            </div>
+
+
+            {% if account %}
+
+                <div class="form-group">
+
+                    <label>
+                        Valor ya pagado
+                    </label>
+
+                    <input
+                        value="{{ account.paid_amount|money }}"
+                        disabled
+                    >
+
+                </div>
+
+            {% endif %}
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label>
+                Descripción / concepto
+            </label>
+
+            <input
+                type="text"
+                name="description"
+                placeholder="Ej: Compra de rodillos y bandas de freno"
+                value="{% if account %}{{ account.description or '' }}{% else %}{{ request.form.get('description', '') }}{% endif %}"
+            >
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label>
+                Observaciones
+            </label>
+
+            <textarea
+                name="notes"
+                rows="4"
+            >{% if account %}{{ account.notes or '' }}{% else %}{{ request.form.get('notes', '') }}{% endif %}</textarea>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+
+                {% if account %}
+                    Guardar cambios
+                {% else %}
+                    Registrar factura
+                {% endif %}
+
+            </button>
+
+
+            <a
+                class="btn btn-light"
+                href="{{ url_for('accounts_payable') }}"
+            >
+                Cancelar
+            </a>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<script>
+
+document.addEventListener(
+    'DOMContentLoaded',
+    () => {
+
+        const purchase =
+            document.getElementById(
+                'purchase_date'
+            );
+
+        const due =
+            document.getElementById(
+                'due_date'
+            );
+
+
+        purchase.addEventListener(
+            'change',
+            () => {
+
+                if (
+                    !purchase.value
+                ) {
+                    return;
+                }
+
+
+                /*
+                 * Solo sugerimos +30 días
+                 * cuando aún no se ha elegido vencimiento.
+                 */
+
+                if (
+                    due.value
+                ) {
+                    return;
+                }
+
+
+                const date =
+                    new Date(
+                        purchase.value
+                        +
+                        'T12:00:00'
+                    );
+
+
+                date.setDate(
+                    date.getDate()
+                    +
+                    30
+                );
+
+
+                const year =
+                    date.getFullYear();
+
+
+                const month =
+                    String(
+                        date.getMonth()
+                        +
+                        1
+                    ).padStart(
+                        2,
+                        '0'
+                    );
+
+
+                const day =
+                    String(
+                        date.getDate()
+                    ).padStart(
+                        2,
+                        '0'
+                    );
+
+
+                due.value =
+                    `${year}-${month}-${day}`;
+
+            }
+        );
+
+    }
+);
+
+</script>
+
+{% endblock %}
