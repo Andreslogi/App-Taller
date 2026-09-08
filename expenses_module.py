@@ -105,35 +105,20 @@ class Expense(db.Model):
 # ============================================================
 
 EXPENSE_CATEGORIES = [
-
     "Arriendo",
-
     "Salarios",
-
     "Seguridad social",
-
     "Servicios públicos",
-
     "Transporte",
-
     "Publicidad",
-
     "Contabilidad",
-
     "Mantenimiento",
-
     "Papelería",
-
     "Software",
-
     "Impuestos",
-
     "Aseo",
-
     "Alimentación",
-
     "Comisiones",
-
     "Otros",
 ]
 
@@ -145,15 +130,10 @@ EXPENSE_TYPES = [
 
 
 PAYMENT_METHODS = [
-
     "Efectivo",
-
     "Transferencia",
-
     "Tarjeta",
-
     "Débito automático",
-
     "Otro",
 ]
 
@@ -178,16 +158,11 @@ def admin_required(view):
                 url_for("login")
             )
 
-
         role = str(
             g.user["role"]
             or
             ""
         ).strip().lower()
-
-
-        # Permitimos ambos nombres por compatibilidad
-        # con las distintas versiones del proyecto.
 
         if role not in (
             "admin",
@@ -202,7 +177,6 @@ def admin_required(view):
             return redirect(
                 url_for("dashboard")
             )
-
 
         return view(
             *args,
@@ -240,14 +214,11 @@ def parse_amount(value):
 
         return None
 
-
     raw = str(value).strip()
-
 
     if not raw:
 
         return None
-
 
     raw = (
         raw
@@ -255,9 +226,8 @@ def parse_amount(value):
         .replace(" ", "")
     )
 
-
     # ========================================================
-    # SOPORTE PARA FORMATOS:
+    # SOPORTE:
     #
     # 1500000
     # 1500000.50
@@ -277,11 +247,10 @@ def parse_amount(value):
 
         else:
 
-            raw = (
-                raw
-                .replace(",", "")
+            raw = raw.replace(
+                ",",
+                "",
             )
-
 
     elif "," in raw:
 
@@ -305,14 +274,12 @@ def parse_amount(value):
                 "",
             )
 
-
     elif raw.count(".") > 1:
 
         raw = raw.replace(
             ".",
             "",
         )
-
 
     try:
 
@@ -325,11 +292,9 @@ def parse_amount(value):
 
         return None
 
-
     if amount < 0:
 
         return None
-
 
     return amount
 
@@ -359,7 +324,6 @@ def last_day_month(value):
             1,
         )
 
-
     return (
         next_month
         -
@@ -379,76 +343,12 @@ def current_user_id():
 
 
 # ============================================================
-# COMMIT COMPATIBLE
-# ============================================================
-
-def commit_connection(conn):
-
-    """
-    Confirma los INSERT / UPDATE / DELETE.
-
-    Esto es importante especialmente en PostgreSQL
-    de Render.
-
-    La función soporta tanto una conexión directa
-    como el CompatConnection utilizado por database.py.
-    """
-
-    # ========================================================
-    # Caso 1:
-    # el wrapper tiene commit()
-    # ========================================================
-
-    if hasattr(
-        conn,
-        "commit",
-    ):
-
-        conn.commit()
-
-        return
-
-
-    # ========================================================
-    # Caso 2:
-    # CompatConnection contiene
-    # una conexión SQLAlchemy en .connection
-    # ========================================================
-
-    inner_connection = getattr(
-        conn,
-        "connection",
-        None,
-    )
-
-
-    if (
-        inner_connection is not None
-        and
-        hasattr(
-            inner_connection,
-            "commit",
-        )
-    ):
-
-        inner_connection.commit()
-
-        return
-
-
-    raise RuntimeError(
-        "No fue posible confirmar la transacción en la base de datos."
-    )
-
-
-# ============================================================
 # FILTROS
 # ============================================================
 
 def get_filters():
 
     today = date.today()
-
 
     default_from = first_day_month(
         today
@@ -457,7 +357,6 @@ def get_filters():
     default_to = last_day_month(
         today
     )
-
 
     date_from_raw = (
         request.args.get(
@@ -475,7 +374,6 @@ def get_filters():
         .strip()
     )
 
-
     category = (
         request.args.get(
             "category",
@@ -483,7 +381,6 @@ def get_filters():
         )
         .strip()
     )
-
 
     expense_type = (
         request.args.get(
@@ -493,7 +390,6 @@ def get_filters():
         .strip()
     )
 
-
     q = (
         request.args.get(
             "q",
@@ -501,7 +397,6 @@ def get_filters():
         )
         .strip()
     )
-
 
     date_from = (
         parse_date(
@@ -511,7 +406,6 @@ def get_filters():
         default_from
     )
 
-
     date_to = (
         parse_date(
             date_to_raw
@@ -520,7 +414,6 @@ def get_filters():
         default_to
     )
 
-
     if date_to < date_from:
 
         date_from, date_to = (
@@ -528,17 +421,11 @@ def get_filters():
             date_from,
         )
 
-
     return {
-
         "date_from": date_from,
-
         "date_to": date_to,
-
         "category": category,
-
         "expense_type": expense_type,
-
         "q": q,
     }
 
@@ -552,7 +439,6 @@ def get_filters():
 def list_expenses():
 
     filters = get_filters()
-
 
     date_from = filters[
         "date_from"
@@ -574,26 +460,19 @@ def list_expenses():
         "q"
     ]
 
-
     # ========================================================
     # WHERE DINÁMICO
     # ========================================================
 
     where = [
-
         "expense_date >= ?",
-
         "expense_date <= ?",
     ]
 
-
     params = [
-
         date_from.isoformat(),
-
         date_to.isoformat(),
     ]
-
 
     if category:
 
@@ -605,7 +484,6 @@ def list_expenses():
             category
         )
 
-
     if expense_type:
 
         where.append(
@@ -615,7 +493,6 @@ def list_expenses():
         params.append(
             expense_type
         )
-
 
     if q:
 
@@ -631,7 +508,6 @@ def list_expenses():
             """
         )
 
-
         search_value = (
             "%"
             +
@@ -639,7 +515,6 @@ def list_expenses():
             +
             "%"
         )
-
 
         params.extend(
             [
@@ -649,16 +524,13 @@ def list_expenses():
             ]
         )
 
-
     where_sql = (
         " AND ".join(
             where
         )
     )
 
-
     with db_conn() as conn:
-
 
         # ====================================================
         # DETALLE
@@ -701,7 +573,6 @@ def list_expenses():
             """,
             tuple(params),
         ).fetchall()
-
 
         # ====================================================
         # KPIs
@@ -752,7 +623,6 @@ def list_expenses():
             tuple(params),
         ).fetchone()
 
-
         # ====================================================
         # DISTRIBUCIÓN POR CATEGORÍA
         # ====================================================
@@ -783,7 +653,6 @@ def list_expenses():
             """,
             tuple(params),
         ).fetchall()
-
 
     # ========================================================
     # TOTALES
@@ -818,11 +687,8 @@ def list_expenses():
     else:
 
         total_expenses = Decimal("0")
-
         fixed_expenses = Decimal("0")
-
         variable_expenses = Decimal("0")
-
 
     return render_template(
         "expenses.html",
@@ -889,13 +755,11 @@ def new_expense():
 
     if request.method == "POST":
 
-
         expense_date = parse_date(
             request.form.get(
                 "expense_date"
             )
         )
-
 
         category = (
             request.form.get(
@@ -905,7 +769,6 @@ def new_expense():
             .strip()
         )
 
-
         description = (
             request.form.get(
                 "description",
@@ -914,13 +777,11 @@ def new_expense():
             .strip()
         )
 
-
         amount = parse_amount(
             request.form.get(
                 "amount"
             )
         )
-
 
         payment_method = (
             request.form.get(
@@ -930,7 +791,6 @@ def new_expense():
             .strip()
         )
 
-
         expense_type = (
             request.form.get(
                 "expense_type",
@@ -938,7 +798,6 @@ def new_expense():
             )
             .strip()
         )
-
 
         notes = (
             request.form.get(
@@ -948,13 +807,11 @@ def new_expense():
             .strip()
         )
 
-
         # ====================================================
         # VALIDACIONES
         # ====================================================
 
         errors = []
-
 
         if not expense_date:
 
@@ -962,13 +819,11 @@ def new_expense():
                 "Debes seleccionar la fecha del gasto."
             )
 
-
         if not category:
 
             errors.append(
                 "Debes seleccionar una categoría."
             )
-
 
         elif category not in EXPENSE_CATEGORIES:
 
@@ -976,13 +831,11 @@ def new_expense():
                 "La categoría seleccionada no es válida."
             )
 
-
         if not description:
 
             errors.append(
                 "Debes ingresar una descripción."
             )
-
 
         if (
             amount is None
@@ -994,20 +847,17 @@ def new_expense():
                 "El valor del gasto debe ser mayor que cero."
             )
 
-
         if not expense_type:
 
             errors.append(
                 "Debes seleccionar si el gasto es fijo o variable."
             )
 
-
         elif expense_type not in EXPENSE_TYPES:
 
             errors.append(
                 "El tipo de gasto seleccionado no es válido."
             )
-
 
         if (
             payment_method
@@ -1018,7 +868,6 @@ def new_expense():
             errors.append(
                 "El método de pago seleccionado no es válido."
             )
-
 
         # ====================================================
         # MOSTRAR ERRORES
@@ -1032,7 +881,6 @@ def new_expense():
                     error,
                     "danger",
                 )
-
 
             return render_template(
                 "expense_form.html",
@@ -1054,13 +902,15 @@ def new_expense():
                 today=date.today().isoformat(),
             )
 
-
         # ====================================================
         # GUARDAR
+        #
+        # IMPORTANTE:
+        # NO hacer commit manual.
+        # db_conn() administra la transacción.
         # ====================================================
 
         now = datetime.now()
-
 
         try:
 
@@ -1120,16 +970,6 @@ def new_expense():
                     ),
                 )
 
-
-                # ============================================
-                # MUY IMPORTANTE PARA POSTGRESQL / RENDER
-                # ============================================
-
-                commit_connection(
-                    conn
-                )
-
-
         except Exception as exc:
 
             print(
@@ -1137,12 +977,10 @@ def new_expense():
                 repr(exc),
             )
 
-
             flash(
                 "No fue posible registrar el gasto. Revisa el registro del servidor.",
                 "danger",
             )
-
 
             return render_template(
                 "expense_form.html",
@@ -1164,19 +1002,22 @@ def new_expense():
                 today=date.today().isoformat(),
             )
 
-
         flash(
             "Gasto registrado correctamente.",
             "success",
         )
 
-
         return redirect(
             url_for(
-                "expenses.list_expenses"
+                "expenses.list_expenses",
+                date_from=first_day_month(
+                    expense_date
+                ).isoformat(),
+                date_to=last_day_month(
+                    expense_date
+                ).isoformat(),
             )
         )
-
 
     # ========================================================
     # GET
@@ -1220,7 +1061,7 @@ def edit_expense(
 ):
 
     # ========================================================
-    # BUSCAR REGISTRO
+    # BUSCAR GASTO
     # ========================================================
 
     with db_conn() as conn:
@@ -1261,7 +1102,6 @@ def edit_expense(
             ),
         ).fetchone()
 
-
     if not expense:
 
         flash(
@@ -1275,20 +1115,13 @@ def edit_expense(
             )
         )
 
-
-    # ========================================================
-    # ACTUALIZAR
-    # ========================================================
-
     if request.method == "POST":
-
 
         expense_date = parse_date(
             request.form.get(
                 "expense_date"
             )
         )
-
 
         category = (
             request.form.get(
@@ -1298,7 +1131,6 @@ def edit_expense(
             .strip()
         )
 
-
         description = (
             request.form.get(
                 "description",
@@ -1307,13 +1139,11 @@ def edit_expense(
             .strip()
         )
 
-
         amount = parse_amount(
             request.form.get(
                 "amount"
             )
         )
-
 
         payment_method = (
             request.form.get(
@@ -1323,7 +1153,6 @@ def edit_expense(
             .strip()
         )
 
-
         expense_type = (
             request.form.get(
                 "expense_type",
@@ -1331,7 +1160,6 @@ def edit_expense(
             )
             .strip()
         )
-
 
         notes = (
             request.form.get(
@@ -1341,13 +1169,11 @@ def edit_expense(
             .strip()
         )
 
-
         # ====================================================
         # VALIDACIONES
         # ====================================================
 
         errors = []
-
 
         if not expense_date:
 
@@ -1355,13 +1181,11 @@ def edit_expense(
                 "Debes seleccionar la fecha del gasto."
             )
 
-
         if not category:
 
             errors.append(
                 "Debes seleccionar una categoría."
             )
-
 
         elif category not in EXPENSE_CATEGORIES:
 
@@ -1369,13 +1193,11 @@ def edit_expense(
                 "La categoría seleccionada no es válida."
             )
 
-
         if not description:
 
             errors.append(
                 "Debes ingresar una descripción."
             )
-
 
         if (
             amount is None
@@ -1387,13 +1209,11 @@ def edit_expense(
                 "El valor debe ser mayor que cero."
             )
 
-
         if expense_type not in EXPENSE_TYPES:
 
             errors.append(
                 "Debes seleccionar un tipo de gasto válido."
             )
-
 
         if (
             payment_method
@@ -1405,7 +1225,6 @@ def edit_expense(
                 "El método de pago seleccionado no es válido."
             )
 
-
         if errors:
 
             for error in errors:
@@ -1415,44 +1234,17 @@ def edit_expense(
                     "danger",
                 )
 
-
-            with db_conn() as conn:
-
-                expense = conn.execute(
-                    """
-                    SELECT *
-                    FROM expenses
-                    WHERE id = ?
-                    """,
-                    (
-                        expense_id,
-                    ),
-                ).fetchone()
-
-
-            return render_template(
-                "expense_form.html",
-
-                expense=expense,
-
-                categories=(
-                    EXPENSE_CATEGORIES
-                ),
-
-                expense_types=(
-                    EXPENSE_TYPES
-                ),
-
-                payment_methods=(
-                    PAYMENT_METHODS
-                ),
-
-                today=date.today().isoformat(),
+            return redirect(
+                url_for(
+                    "expenses.edit_expense",
+                    expense_id=expense_id,
+                )
             )
 
-
         # ====================================================
-        # UPDATE
+        # ACTUALIZAR
+        #
+        # SIN commit manual.
         # ====================================================
 
         try:
@@ -1509,16 +1301,6 @@ def edit_expense(
                     ),
                 )
 
-
-                # ============================================
-                # CONFIRMAR CAMBIO EN POSTGRESQL
-                # ============================================
-
-                commit_connection(
-                    conn
-                )
-
-
         except Exception as exc:
 
             print(
@@ -1526,12 +1308,10 @@ def edit_expense(
                 repr(exc),
             )
 
-
             flash(
                 "No fue posible actualizar el gasto.",
                 "danger",
             )
-
 
             return redirect(
                 url_for(
@@ -1540,19 +1320,22 @@ def edit_expense(
                 )
             )
 
-
         flash(
             "Gasto actualizado correctamente.",
             "success",
         )
 
-
         return redirect(
             url_for(
-                "expenses.list_expenses"
+                "expenses.list_expenses",
+                date_from=first_day_month(
+                    expense_date
+                ).isoformat(),
+                date_to=last_day_month(
+                    expense_date
+                ).isoformat(),
             )
         )
-
 
     # ========================================================
     # GET
@@ -1598,11 +1381,11 @@ def delete_expense(
 
         with db_conn() as conn:
 
-
             expense = conn.execute(
                 """
                 SELECT
                     id,
+                    expense_date,
                     description
 
                 FROM expenses
@@ -1614,7 +1397,6 @@ def delete_expense(
                     expense_id,
                 ),
             ).fetchone()
-
 
             if not expense:
 
@@ -1629,6 +1411,9 @@ def delete_expense(
                     )
                 )
 
+            expense_date = parse_date(
+                expense["expense_date"]
+            )
 
             conn.execute(
                 """
@@ -1642,16 +1427,6 @@ def delete_expense(
                 ),
             )
 
-
-            # ================================================
-            # CONFIRMAR ELIMINACIÓN EN POSTGRESQL
-            # ================================================
-
-            commit_connection(
-                conn
-            )
-
-
     except Exception as exc:
 
         print(
@@ -1659,12 +1434,10 @@ def delete_expense(
             repr(exc),
         )
 
-
         flash(
             "No fue posible eliminar el gasto.",
             "danger",
         )
-
 
         return redirect(
             url_for(
@@ -1672,12 +1445,24 @@ def delete_expense(
             )
         )
 
-
     flash(
         "Gasto eliminado correctamente.",
         "success",
     )
 
+    if expense_date:
+
+        return redirect(
+            url_for(
+                "expenses.list_expenses",
+                date_from=first_day_month(
+                    expense_date
+                ).isoformat(),
+                date_to=last_day_month(
+                    expense_date
+                ).isoformat(),
+            )
+        )
 
     return redirect(
         url_for(
