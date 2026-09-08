@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+
+
+{% if expense %}
+    {% set heading='Editar gasto' %}
+{% else %}
+    {% set heading='Registrar gasto' %}
+{% endif %}
+
+
+{% block content %}
+
+<div class="card">
+
+    <form method="post">
+
+
+        <div class="form-grid">
+
+
+            <div class="form-group">
+
+                <label>
+                    Fecha *
+                </label>
+
+                <input
+                    type="date"
+                    name="expense_date"
+                    value="{% if expense %}{{ expense.expense_date|string|truncate(10, True, '') }}{% else %}{{ request.form.get('expense_date', today) }}{% endif %}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Categoría *
+                </label>
+
+                {% if expense %}
+                    {% set selected_category = expense.category %}
+                {% else %}
+                    {% set selected_category = request.form.get('category', '') %}
+                {% endif %}
+
+
+                <select
+                    name="category"
+                    required
+                >
+
+                    <option value="">
+                        Selecciona...
+                    </option>
+
+                    {% for item in categories %}
+
+                        <option
+                            value="{{ item }}"
+                            {% if selected_category == item %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ item }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Descripción *
+                </label>
+
+                <input
+                    type="text"
+                    name="description"
+                    value="{% if expense %}{{ expense.description }}{% else %}{{ request.form.get('description', '') }}{% endif %}"
+                    placeholder="Ej: Nómina semana 36"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Valor *
+                </label>
+
+                <input
+                    type="number"
+                    name="amount"
+                    min="1"
+                    step="1"
+                    value="{% if expense %}{{ expense.amount|int }}{% else %}{{ request.form.get('amount', '') }}{% endif %}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Tipo de gasto *
+                </label>
+
+                {% if expense %}
+                    {% set selected_type = expense.expense_type %}
+                {% else %}
+                    {% set selected_type = request.form.get('expense_type', 'Variable') %}
+                {% endif %}
+
+
+                <select
+                    name="expense_type"
+                    required
+                >
+
+                    {% for item in expense_types %}
+
+                        <option
+                            value="{{ item }}"
+                            {% if selected_type == item %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ item }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+
+                <div class="muted">
+                    Fijo: arriendo, salarios, seguridad social, etc.
+                    Variable: publicidad, mantenimiento, transporte, etc.
+                </div>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Forma de pago *
+                </label>
+
+                {% if expense %}
+                    {% set selected_method = expense.payment_method %}
+                {% else %}
+                    {% set selected_method = request.form.get('payment_method', 'Transferencia') %}
+                {% endif %}
+
+
+                <select
+                    name="payment_method"
+                    required
+                >
+
+                    {% for item in payment_methods %}
+
+                        <option
+                            value="{{ item }}"
+                            {% if selected_method == item %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ item }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label>
+                Observaciones
+            </label>
+
+            <textarea
+                name="notes"
+                rows="4"
+                placeholder="Información adicional del gasto"
+            >{% if expense %}{{ expense.notes or '' }}{% else %}{{ request.form.get('notes', '') }}{% endif %}</textarea>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                type="submit"
+                class="btn btn-primary"
+            >
+
+                {% if expense %}
+                    Guardar cambios
+                {% else %}
+                    Registrar gasto
+                {% endif %}
+
+            </button>
+
+
+            <a
+                class="btn btn-light"
+                href="{{ url_for('expenses.list_expenses') }}"
+            >
+                Cancelar
+            </a>
+
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

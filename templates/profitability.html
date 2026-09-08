@@ -1,0 +1,1217 @@
+{% extends 'base.html' %}
+
+{% set heading='Rentabilidad y sostenibilidad' %}
+
+{% block content %}
+
+<style>
+
+.profitability-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(
+            4,
+            minmax(210px, 1fr)
+        );
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.profit-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 13px;
+    padding: 20px;
+    box-shadow:
+        0 2px 8px
+        rgba(15,23,42,.04);
+}
+
+.profit-card-title {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.profit-card-value {
+    margin-top: 7px;
+    color: #0f172a;
+    font-size: 27px;
+    font-weight: 800;
+}
+
+.profit-card-description {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.card-income {
+    border-left: 6px solid #198754;
+}
+
+.card-expense {
+    border-left: 6px solid #dc3545;
+}
+
+.card-result-positive {
+    border-left: 6px solid #198754;
+}
+
+.card-result-negative {
+    border-left: 6px solid #dc3545;
+}
+
+.card-margin {
+    border-left: 6px solid #1f4e78;
+}
+
+
+/* =========================================================
+   SEMÁFORO
+========================================================= */
+
+.health-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+
+    padding: 20px;
+    margin-bottom: 20px;
+
+    background: white;
+
+    border: 1px solid #e2e8f0;
+    border-radius: 13px;
+}
+
+.health-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.health-light {
+    width: 24px;
+    height: 24px;
+
+    border-radius: 50%;
+
+    flex-shrink: 0;
+}
+
+.health-green {
+    background: #22a447;
+}
+
+.health-orange {
+    background: #f28c28;
+}
+
+.health-red {
+    background: #d71920;
+}
+
+.health-title {
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.health-subtitle {
+    margin-top: 3px;
+
+    color: #64748b;
+
+    font-size: 12px;
+}
+
+
+/* =========================================================
+   FORMULA
+========================================================= */
+
+.equation {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        auto
+        1fr
+        auto
+        1fr;
+
+    gap: 12px;
+
+    align-items: center;
+}
+
+.equation-item {
+    padding: 16px;
+
+    background: #f8fafc;
+
+    border-radius: 10px;
+
+    text-align: center;
+}
+
+.equation-symbol {
+    font-size: 25px;
+    font-weight: 800;
+
+    color: #64748b;
+}
+
+.equation-label {
+    color: #64748b;
+
+    font-size: 12px;
+}
+
+.equation-value {
+    margin-top: 6px;
+
+    font-size: 18px;
+    font-weight: 800;
+}
+
+
+/* =========================================================
+   BARRAS
+========================================================= */
+
+.bar-row {
+    display: grid;
+
+    grid-template-columns:
+        210px
+        1fr
+        150px;
+
+    gap: 12px;
+
+    align-items: center;
+
+    margin-bottom: 15px;
+}
+
+.bar-track {
+    height: 12px;
+
+    overflow: hidden;
+
+    background: #e2e8f0;
+
+    border-radius: 999px;
+}
+
+.bar-fill {
+    width: 0;
+    height: 100%;
+
+    border-radius: 999px;
+
+    transition:
+        width .35s ease;
+}
+
+.bar-products {
+    background: #1f4e78;
+}
+
+.bar-services {
+    background: #198754;
+}
+
+.bar-fixed {
+    background: #7c3aed;
+}
+
+.bar-variable {
+    background: #f59e0b;
+}
+
+.money-right {
+    text-align: right;
+    font-weight: 700;
+}
+
+
+/* =========================================================
+   AVISOS
+========================================================= */
+
+.explanation-box {
+    padding: 16px;
+
+    margin-bottom: 20px;
+
+    background: #f8fafc;
+
+    border:
+        1px solid
+        #e2e8f0;
+
+    border-radius: 10px;
+
+    color: #475569;
+
+    line-height: 1.55;
+}
+
+.explanation-box strong {
+    color: #1e293b;
+}
+
+
+/* =========================================================
+   RESULTADO
+========================================================= */
+
+.result-summary {
+    margin-top: 20px;
+
+    padding-top: 18px;
+
+    border-top:
+        1px solid
+        #e2e8f0;
+
+    text-align: center;
+}
+
+.result-summary-label {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.result-summary-value {
+    margin-top: 5px;
+
+    font-size: 27px;
+    font-weight: 800;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media(max-width:1100px) {
+
+    .profitability-grid {
+        grid-template-columns:
+            repeat(
+                2,
+                minmax(200px,1fr)
+            );
+    }
+
+}
+
+@media(max-width:850px) {
+
+    .equation {
+        grid-template-columns: 1fr;
+    }
+
+    .equation-symbol {
+        text-align: center;
+    }
+
+    .bar-row {
+        grid-template-columns: 1fr;
+    }
+
+    .money-right {
+        text-align: left;
+    }
+
+    .health-box {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+}
+
+@media(max-width:650px) {
+
+    .profitability-grid {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+</style>
+
+
+<!-- ======================================================
+     FILTROS DE FECHA
+======================================================= -->
+
+<div class="card">
+
+    <div
+        class="actions"
+        style="margin-bottom:18px;"
+    >
+
+        <a
+            href="{{ url_for(
+                'profitability.profitability',
+                preset='today'
+            ) }}"
+            class="btn
+            {% if preset == 'today' %}
+                btn-primary
+            {% else %}
+                btn-light
+            {% endif %}"
+        >
+            Hoy
+        </a>
+
+
+        <a
+            href="{{ url_for(
+                'profitability.profitability',
+                preset='week'
+            ) }}"
+            class="btn
+            {% if preset == 'week' %}
+                btn-primary
+            {% else %}
+                btn-light
+            {% endif %}"
+        >
+            Esta semana
+        </a>
+
+
+        <a
+            href="{{ url_for(
+                'profitability.profitability',
+                preset='month'
+            ) }}"
+            class="btn
+            {% if preset == 'month' %}
+                btn-primary
+            {% else %}
+                btn-light
+            {% endif %}"
+        >
+            Este mes
+        </a>
+
+    </div>
+
+
+    <form method="get">
+
+        <div class="form-grid">
+
+
+            <div class="form-group">
+
+                <label>
+                    Desde
+                </label>
+
+                <input
+                    type="date"
+                    name="date_from"
+                    value="{{ date_from }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Hasta
+                </label>
+
+                <input
+                    type="date"
+                    name="date_to"
+                    value="{{ date_to }}"
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+                Consultar período
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ======================================================
+     EXPLICACIÓN
+======================================================= -->
+
+<div class="explanation-box">
+
+    <strong>
+        ¿Qué mide esta vista?
+    </strong>
+
+    Esta pantalla compara los ingresos realmente cobrados
+    por el negocio contra los gastos operativos registrados.
+
+    Las compras de repuestos para surtir inventario
+    <strong>
+        no se consideran gasto operativo
+    </strong>
+    en esta vista.
+
+    Las remisiones a crédito solamente se consideran
+    cuando la cuenta por cobrar ha sido pagada
+    completamente.
+
+</div>
+
+
+<!-- ======================================================
+     SEMÁFORO
+======================================================= -->
+
+<div class="health-box">
+
+    <div class="health-info">
+
+        <div
+            class="
+                health-light
+
+                {% if health_class == 'green' %}
+                    health-green
+
+                {% elif health_class == 'orange' %}
+                    health-orange
+
+                {% else %}
+                    health-red
+
+                {% endif %}
+            "
+        ></div>
+
+
+        <div>
+
+            <div class="health-title">
+
+                {{ health_label }}
+
+            </div>
+
+
+            <div class="health-subtitle">
+
+                Período:
+                {{ date_from }}
+                al
+                {{ date_to }}
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div>
+
+        <div class="muted">
+            Margen operativo
+        </div>
+
+        <strong
+            style="
+                font-size:22px;
+            "
+        >
+            {{ operating_margin|round(1) }} %
+        </strong>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+     KPIs
+======================================================= -->
+
+<div class="profitability-grid">
+
+
+    <div class="profit-card card-income">
+
+        <div class="profit-card-title">
+            Ingresos cobrados
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ total_business_income|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Productos cobrados
+            +
+            30 % del negocio en servicios.
+
+        </div>
+
+    </div>
+
+
+    <div class="profit-card">
+
+        <div class="profit-card-title">
+            Productos cobrados
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ product_income|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Ventas de productos que ya pueden
+            considerarse cobradas.
+
+        </div>
+
+    </div>
+
+
+    <div class="profit-card">
+
+        <div class="profit-card-title">
+            Servicios cobrados
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ services_total|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Valor total de servicios incluidos
+            en el período.
+
+        </div>
+
+    </div>
+
+
+    <div class="profit-card">
+
+        <div class="profit-card-title">
+            30 % del negocio en servicios
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ service_business_income|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Participación correspondiente al negocio.
+
+        </div>
+
+    </div>
+
+
+    <div class="profit-card card-expense">
+
+        <div class="profit-card-title">
+            Gastos operativos
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ expenses_total|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Gastos registrados en el módulo Gastos.
+
+        </div>
+
+    </div>
+
+
+    <div class="profit-card">
+
+        <div class="profit-card-title">
+            Gastos fijos
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ fixed_expenses|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Arriendo, salarios, seguridad social,
+            etc.
+
+        </div>
+
+    </div>
+
+
+    <div class="profit-card">
+
+        <div class="profit-card-title">
+            Gastos variables
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ variable_expenses|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Publicidad, mantenimiento, transporte,
+            etc.
+
+        </div>
+
+    </div>
+
+
+    <div
+        class="
+            profit-card
+
+            {% if operating_result >= 0 %}
+                card-result-positive
+            {% else %}
+                card-result-negative
+            {% endif %}
+        "
+    >
+
+        <div class="profit-card-title">
+            Resultado operativo
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ operating_result|money }}
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Ingresos cobrados
+            menos gastos operativos.
+
+        </div>
+
+    </div>
+
+
+    <div class="profit-card card-margin">
+
+        <div class="profit-card-title">
+            Margen operativo
+        </div>
+
+        <div class="profit-card-value">
+
+            {{ operating_margin|round(1) }} %
+
+        </div>
+
+        <div class="profit-card-description">
+
+            Resultado operativo ÷ ingresos cobrados.
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+     CÁLCULO
+======================================================= -->
+
+<div class="card">
+
+    <h3>
+        Cómo se calcula el resultado
+    </h3>
+
+
+    <div class="equation">
+
+
+        <div class="equation-item">
+
+            <div class="equation-label">
+                Productos cobrados
+            </div>
+
+            <div class="equation-value">
+                {{ product_income|money }}
+            </div>
+
+        </div>
+
+
+        <div class="equation-symbol">
+            +
+        </div>
+
+
+        <div class="equation-item">
+
+            <div class="equation-label">
+                30 % servicios
+            </div>
+
+            <div class="equation-value">
+                {{ service_business_income|money }}
+            </div>
+
+        </div>
+
+
+        <div class="equation-symbol">
+            −
+        </div>
+
+
+        <div class="equation-item">
+
+            <div class="equation-label">
+                Gastos operativos
+            </div>
+
+            <div class="equation-value">
+                {{ expenses_total|money }}
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="result-summary">
+
+        <div class="result-summary-label">
+            Resultado operativo
+        </div>
+
+        <div class="result-summary-value">
+
+            {{ operating_result|money }}
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+     ORIGEN DE INGRESOS
+======================================================= -->
+
+<div class="card">
+
+    <h3>
+        De dónde vienen los ingresos
+    </h3>
+
+
+    <div class="bar-row">
+
+        <div>
+            Productos cobrados
+        </div>
+
+
+        <div class="bar-track">
+
+            <div
+                class="bar-fill bar-products"
+                data-width="{{ product_percentage|round(1) }}"
+            ></div>
+
+        </div>
+
+
+        <div class="money-right">
+
+            {{ product_income|money }}
+
+        </div>
+
+    </div>
+
+
+    <div class="bar-row">
+
+        <div>
+            Participación servicios
+        </div>
+
+
+        <div class="bar-track">
+
+            <div
+                class="bar-fill bar-services"
+                data-width="{{ service_percentage|round(1) }}"
+            ></div>
+
+        </div>
+
+
+        <div class="money-right">
+
+            {{ service_business_income|money }}
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+     COMPOSICIÓN DE GASTOS
+======================================================= -->
+
+<div class="card">
+
+    <h3>
+        Composición de los gastos
+    </h3>
+
+
+    <div class="bar-row">
+
+        <div>
+            Gastos fijos
+        </div>
+
+
+        <div class="bar-track">
+
+            <div
+                class="bar-fill bar-fixed"
+                data-width="{{ fixed_percentage|round(1) }}"
+            ></div>
+
+        </div>
+
+
+        <div class="money-right">
+
+            {{ fixed_expenses|money }}
+
+        </div>
+
+    </div>
+
+
+    <div class="bar-row">
+
+        <div>
+            Gastos variables
+        </div>
+
+
+        <div class="bar-track">
+
+            <div
+                class="bar-fill bar-variable"
+                data-width="{{ variable_percentage|round(1) }}"
+            ></div>
+
+        </div>
+
+
+        <div class="money-right">
+
+            {{ variable_expenses|money }}
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+     GASTOS POR CATEGORÍA
+======================================================= -->
+
+<div class="card">
+
+    <h3>
+        Gastos por categoría
+    </h3>
+
+
+    {% if category_expenses %}
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Categoría
+                        </th>
+
+                        <th>
+                            Registros
+                        </th>
+
+                        <th>
+                            Total
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for item in category_expenses %}
+
+                        <tr>
+
+                            <td>
+                                {{ item.category }}
+                            </td>
+
+                            <td>
+                                {{ item.quantity }}
+                            </td>
+
+                            <td>
+
+                                <strong>
+                                    {{ item.total|money }}
+                                </strong>
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p class="muted">
+
+            No se registraron gastos
+            en este período.
+
+        </p>
+
+    {% endif %}
+
+</div>
+
+
+<!-- ======================================================
+     CONTROL DE CARTERA
+======================================================= -->
+
+<div class="card">
+
+    <h3>
+        Control de ingresos considerados
+    </h3>
+
+
+    <div class="form-grid">
+
+
+        <div>
+
+            <div class="muted">
+                Remisiones de contado consideradas
+            </div>
+
+            <strong
+                style="
+                    font-size:22px;
+                "
+            >
+                {{ cash_invoices }}
+            </strong>
+
+        </div>
+
+
+        <div>
+
+            <div class="muted">
+                Remisiones a crédito completamente cobradas
+            </div>
+
+            <strong
+                style="
+                    font-size:22px;
+                "
+            >
+                {{ paid_credit_invoices }}
+            </strong>
+
+        </div>
+
+
+        <div>
+
+            <div class="muted">
+                Remisiones a crédito todavía pendientes
+            </div>
+
+            <strong
+                style="
+                    font-size:22px;
+                "
+            >
+                {{ excluded_credit_invoices }}
+            </strong>
+
+        </div>
+
+    </div>
+
+
+    <p
+        class="muted"
+        style="
+            margin-top:18px;
+        "
+    >
+
+        Las remisiones a crédito pendientes
+        no se incluyen dentro de los ingresos
+        de esta vista.
+
+    </p>
+
+</div>
+
+
+<!-- ======================================================
+     NOTA IMPORTANTE
+======================================================= -->
+
+<div class="explanation-box">
+
+    <strong>
+        Importante:
+    </strong>
+
+    este indicador muestra la sostenibilidad operativa
+    basada en ingresos cobrados y gastos.
+
+    Todavía no descuenta el costo histórico de los
+    repuestos vendidos.
+
+    Por eso no debe interpretarse aún como utilidad
+    contable final.
+
+</div>
+
+
+<script>
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+
+        document
+            .querySelectorAll(
+                '[data-width]'
+            )
+            .forEach(
+                function (element) {
+
+                    let width =
+                        Number(
+                            element.dataset.width
+                            ||
+                            0
+                        );
+
+
+                    if (width < 0) {
+                        width = 0;
+                    }
+
+
+                    if (width > 100) {
+                        width = 100;
+                    }
+
+
+                    element.style.width =
+                        width
+                        +
+                        '%';
+
+                }
+            );
+
+    }
+);
+
+</script>
+
+{% endblock %}

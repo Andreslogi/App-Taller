@@ -1,0 +1,561 @@
+{% extends 'base.html' %}
+
+{% set heading='Gastos del negocio' %}
+
+{% block content %}
+
+<style>
+
+.expense-kpis {
+    display: grid;
+    grid-template-columns:
+        repeat(3, minmax(220px, 1fr));
+    gap: 18px;
+    margin-bottom: 20px;
+}
+
+.expense-kpi {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.expense-kpi-title {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.expense-kpi-value {
+    margin-top: 8px;
+    font-size: 28px;
+    font-weight: 800;
+}
+
+.expense-kpi-main {
+    border-left: 6px solid #1f4e78;
+}
+
+.expense-kpi-fixed {
+    border-left: 6px solid #7c3aed;
+}
+
+.expense-kpi-variable {
+    border-left: 6px solid #f59e0b;
+}
+
+.expense-type {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.expense-fixed {
+    background: #f1eafe;
+    color: #6330a3;
+}
+
+.expense-variable {
+    background: #fff3df;
+    color: #985700;
+}
+
+.category-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+    margin-top: 5px;
+}
+
+.category-bar-fill {
+    height: 100%;
+    background: #1f4e78;
+}
+
+@media(max-width:900px) {
+
+    .expense-kpis {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+</style>
+
+
+<div
+    class="actions"
+    style="margin-bottom:18px;"
+>
+
+    <a
+        class="btn btn-primary"
+        href="{{ url_for('expenses.new_expense') }}"
+    >
+        + Registrar gasto
+    </a>
+
+</div>
+
+
+<!-- ======================================================
+     KPIs
+======================================================= -->
+
+<div class="expense-kpis">
+
+    <div class="expense-kpi expense-kpi-main">
+
+        <div class="expense-kpi-title">
+            Total gastos del período
+        </div>
+
+        <div class="expense-kpi-value">
+            {{ total_expenses|money }}
+        </div>
+
+    </div>
+
+
+    <div class="expense-kpi expense-kpi-fixed">
+
+        <div class="expense-kpi-title">
+            Gastos fijos
+        </div>
+
+        <div class="expense-kpi-value">
+            {{ fixed_expenses|money }}
+        </div>
+
+    </div>
+
+
+    <div class="expense-kpi expense-kpi-variable">
+
+        <div class="expense-kpi-title">
+            Gastos variables
+        </div>
+
+        <div class="expense-kpi-value">
+            {{ variable_expenses|money }}
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+     FILTROS
+======================================================= -->
+
+<div class="card">
+
+    <form method="get">
+
+        <div class="form-grid">
+
+
+            <div class="form-group">
+
+                <label>
+                    Desde
+                </label>
+
+                <input
+                    type="date"
+                    name="date_from"
+                    value="{{ date_from }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Hasta
+                </label>
+
+                <input
+                    type="date"
+                    name="date_to"
+                    value="{{ date_to }}"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Categoría
+                </label>
+
+                <select name="category">
+
+                    <option value="">
+                        Todas
+                    </option>
+
+                    {% for item in categories %}
+
+                        <option
+                            value="{{ item }}"
+                            {% if category_filter == item %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ item }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Tipo
+                </label>
+
+                <select name="expense_type">
+
+                    <option value="">
+                        Todos
+                    </option>
+
+                    {% for item in expense_types %}
+
+                        <option
+                            value="{{ item }}"
+                            {% if expense_type_filter == item %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ item }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Buscar
+                </label>
+
+                <input
+                    name="q"
+                    value="{{ q }}"
+                    placeholder="Descripción, categoría, observación..."
+                >
+
+            </div>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+                Filtrar
+            </button>
+
+            <a
+                class="btn btn-light"
+                href="{{ url_for('expenses.list_expenses') }}"
+            >
+                Mes actual
+            </a>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- ======================================================
+     DISTRIBUCIÓN POR CATEGORÍA
+======================================================= -->
+
+{% if categories_summary %}
+
+<div class="card">
+
+    <h3>
+        Distribución por categoría
+    </h3>
+
+
+    {% for item in categories_summary %}
+
+        {% set percent = 0 %}
+
+        {% if total_expenses > 0 %}
+
+            {% set percent =
+                (
+                    item.total
+                    /
+                    total_expenses
+                    *
+                    100
+                )
+                |round(1)
+            %}
+
+        {% endif %}
+
+
+        <div
+            style="
+                display:grid;
+                grid-template-columns:200px 1fr 140px;
+                gap:12px;
+                align-items:center;
+                margin-bottom:12px;
+            "
+        >
+
+            <div>
+                {{ item.category }}
+            </div>
+
+
+            <div class="category-bar">
+
+                <div
+                    class="category-bar-fill"
+                    data-percent="{{ percent }}"
+                ></div>
+
+            </div>
+
+            <strong style="text-align:right;">
+                {{ item.total|money }}
+            </strong>
+
+        </div>
+
+    {% endfor %}
+
+</div>
+
+{% endif %}
+
+
+<!-- ======================================================
+     TABLA
+======================================================= -->
+
+<div class="card">
+
+    <h3>
+        Detalle de gastos
+    </h3>
+
+
+    {% if expenses %}
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Categoría</th>
+                        <th>Descripción</th>
+                        <th>Tipo</th>
+                        <th>Forma de pago</th>
+                        <th>Valor</th>
+                        <th>Registrado por</th>
+                        <th>Acciones</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                {% for expense in expenses %}
+
+                    <tr>
+
+                        <td>
+                            {{ expense.expense_date|string|truncate(10, True, '') }}
+                        </td>
+
+
+                        <td>
+                            {{ expense.category }}
+                        </td>
+
+
+                        <td>
+
+                            <strong>
+                                {{ expense.description }}
+                            </strong>
+
+                            {% if expense.notes %}
+
+                                <div class="muted">
+                                    {{ expense.notes }}
+                                </div>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td>
+
+                            {% if expense.expense_type == 'Fijo' %}
+
+                                <span class="expense-type expense-fixed">
+                                    FIJO
+                                </span>
+
+                            {% else %}
+
+                                <span class="expense-type expense-variable">
+                                    VARIABLE
+                                </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td>
+                            {{ expense.payment_method }}
+                        </td>
+
+
+                        <td>
+
+                            <strong>
+                                {{ expense.amount|money }}
+                            </strong>
+
+                        </td>
+
+
+                        <td>
+                            {{ expense.user_name or '-' }}
+                        </td>
+
+
+                        <td>
+
+                            <div class="actions">
+
+                                <a
+                                    class="btn btn-sm btn-light"
+                                    href="{{ url_for(
+                                        'expenses.edit_expense',
+                                        expense_id=expense.id
+                                    ) }}"
+                                >
+                                    Editar
+                                </a>
+
+
+                                <form
+                                    method="post"
+                                    action="{{ url_for(
+                                        'expenses.delete_expense',
+                                        expense_id=expense.id
+                                    ) }}"
+                                    style="margin:0;"
+                                    onsubmit="
+                                        return confirm(
+                                            '¿Seguro que deseas eliminar este gasto?'
+                                        );
+                                    "
+                                >
+
+                                    <button
+                                        class="btn btn-sm btn-danger"
+                                        type="submit"
+                                    >
+                                        Eliminar
+                                    </button>
+
+                                </form>
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p class="muted">
+            No hay gastos registrados para este período.
+        </p>
+
+    {% endif %}
+
+</div>
+
+<script>
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+
+        document
+            .querySelectorAll(
+                '.category-bar-fill'
+            )
+            .forEach(
+                function (element) {
+
+                    const percent =
+                        Number(
+                            element.dataset.percent
+                            ||
+                            0
+                        );
+
+                    element.style.width =
+                        percent
+                        +
+                        '%';
+
+                }
+            );
+
+    }
+);
+
+</script>
+
+{% endblock %}

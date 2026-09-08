@@ -22,7 +22,8 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-
+from expenses_module import expenses_bp
+from profitability_module import profitability_bp
 load_dotenv()
 
 APP_NAME = "Control de Inventario y Remisiones"
@@ -51,7 +52,8 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 db.init_app(app)
 migrate = Migrate(app, db)
-
+app.register_blueprint(expenses_bp)
+app.register_blueprint(profitability_bp)
 
 def money(value: Any) -> str:
     try:
