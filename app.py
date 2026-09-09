@@ -5,13 +5,15 @@ import sys
 import threading
 import time
 import webbrowser
+import csv
+from io import StringIO
 from functools import wraps
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, flash, g, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, flash, g, redirect, render_template, request, send_file, session, url_for, Response
 from flask_migrate import Migrate
 from dotenv import load_dotenv
 from database import db, db_conn, IntegrityError, BASE_DIR as DATA_BASE_DIR, LOCAL_DB_PATH, database_url
@@ -261,6 +263,100 @@ def seed_from_excel_if_empty() -> None:
             imported += 1
         print(f"Productos importados: {imported}")
 
+@app.route("/productos/exportar-csv")
+def export_products_csv():
+
+    if g.user is None:
+
+        flash(
+            "Debes iniciar sesión.",
+            "warning"
+        )
+
+        return redirect(
+            url_for("login")
+        )
+
+    with db_conn() as conn:
+
+        products = conn.execute(
+            """
+            SELECT
+                code,
+                description,
+                category,
+                unit,
+                stock,
+                sale_price,
+                active
+
+            FROM products
+
+            ORDER BY
+                description ASC
+            """
+        ).fetchall()
+
+    output = StringIO()
+
+    # BOM para que Excel abra correctamente
+    # tildes, ñ y caracteres especiales.
+
+    output.write("\ufeff")
+
+    writer = csv.writer(
+        output,
+        delimiter=";",
+        lineterminator="\n"
+    )
+
+    writer.writerow(
+        [
+            "Código",
+            "Descripción",
+            "Categoría",
+            "Unidad",
+            "Stock",
+            "Precio de venta",
+            "Activo",
+        ]
+    )
+
+    for product in products:
+
+        writer.writerow(
+            [
+                product["code"],
+                product["description"],
+                product["category"],
+                product["unit"],
+                product["stock"],
+                product["sale_price"],
+                (
+                    "Sí"
+                    if product["active"]
+                    else
+                    "No"
+                ),
+            ]
+        )
+
+    csv_content = output.getvalue()
+
+    output.close()
+
+    return Response(
+        csv_content,
+        mimetype=(
+            "text/csv; "
+            "charset=utf-8"
+        ),
+        headers={
+            "Content-Disposition":
+                "attachment; "
+                "filename=lista_precios_productos.csv"
+        }
+    )
 
 def get_settings(conn=None, lock: bool = False):
     sql = "SELECT * FROM settings WHERE id=1"
