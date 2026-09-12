@@ -13,21 +13,25 @@
     <a
         class="btn btn-primary"
         href="{{ url_for(
+            'invoice_pdf_view',
+            invoice_id=invoice.id
+        ) }}"
+        target="_blank"
+        rel="noopener"
+    >
+        Imprimir PDF
+    </a>
+
+
+    <a
+        class="btn btn-light"
+        href="{{ url_for(
             'invoice_pdf',
             invoice_id=invoice.id
         ) }}"
     >
         Descargar PDF
     </a>
-
-
-    <button
-        class="btn btn-light"
-        type="button"
-        onclick="window.print()"
-    >
-        Imprimir
-    </button>
 
 
     {% if can_edit_invoice %}

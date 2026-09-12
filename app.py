@@ -110,86 +110,24 @@ def role_required(*roles):
     return decorator
 
 def arturo_required(view):
-
+    """Permite editar/eliminar remisiones únicamente a arturo.lopez administrador."""
     @wraps(view)
     def wrapped_view(**kwargs):
-
         if g.user is None:
+            flash("Debes iniciar sesión.", "warning")
+            return redirect(url_for("login"))
 
+        username = str(g.user["username"] or "").strip().lower()
+        role = str(g.user["role"] or "").strip().lower()
+
+        if username != "arturo.lopez" or role != "administrador":
             flash(
-                "Debes iniciar sesión.",
-                "warning"
+                "Solo el usuario arturo.lopez puede editar o eliminar remisiones.",
+                "danger",
             )
-
-            return redirect(
-                url_for("login")
-            )
-
-        username = str(
-            g.user["username"]
-            or
-            ""
-        ).strip().lower()
-
-        if username != "arturo.lopez":
-
-            flash(
-                "Solo Arturo López puede eliminar remisiones.",
-                "danger"
-            )
-
-            return redirect(
-                url_for("invoices")
-            )
+            return redirect(url_for("invoices"))
 
         return view(**kwargs)
-
-    return wrapped_view
-
-
-def arturo_required(view):
-
-    @wraps(view)
-    def wrapped_view(**kwargs):
-
-        if g.user is None:
-
-            flash(
-                "Debes iniciar sesión.",
-                "warning"
-            )
-
-            return redirect(
-                url_for("login")
-            )
-
-
-        full_name = str(
-            g.user["full_name"] or ""
-        ).strip().lower()
-
-        role = str(
-            g.user["role"] or ""
-        ).strip().lower()
-
-
-        if (
-            full_name != "arturo lópez"
-            or role != "administrador"
-        ):
-
-            flash(
-                "Solo Arturo López puede editar remisiones.",
-                "danger"
-            )
-
-            return redirect(
-                url_for("dashboard")
-            )
-
-
-        return view(**kwargs)
-
 
     return wrapped_view
 
@@ -3373,86 +3311,61 @@ def account_payable_history(account_id):
 @app.route("/facturas/<int:invoice_id>")
 @login_required
 def invoice_view(invoice_id: int):
-
     with db_conn() as conn:
-
         invoice = conn.execute(
             """
             SELECT
                 i.*,
                 u.full_name AS user_name
-
             FROM invoices i
-
-            LEFT JOIN users u
-                ON u.id = i.user_id
-
+            LEFT JOIN users u ON u.id = i.user_id
             WHERE i.id = ?
             """,
-            (
-                invoice_id,
-            )
+            (invoice_id,),
         ).fetchone()
-
 
         items = conn.execute(
             """
             SELECT *
             FROM invoice_items
-
             WHERE invoice_id = ?
-
             ORDER BY id
             """,
-            (
-                invoice_id,
-            )
+            (invoice_id,),
         ).fetchall()
-
 
         service_items = conn.execute(
             """
             SELECT *
             FROM invoice_service_items
-
             WHERE invoice_id = ?
-
             ORDER BY id
             """,
-            (
-                invoice_id,
-            )
+            (invoice_id,),
         ).fetchall()
 
-
-        settings = get_settings(
-            conn
-        )
-
+        settings = get_settings(conn)
 
     if not invoice:
+        flash("Remisión no encontrada.", "danger")
+        return redirect(url_for("invoices"))
 
-        flash(
-            "Remisión no encontrada.",
-            "danger"
-        )
-
-        return redirect(
-            url_for("invoices")
-        )
-
+    current_username = str(g.user["username"] or "").strip().lower()
+    current_role = str(g.user["role"] or "").strip().lower()
+    can_edit_invoice = (
+        current_username == "arturo.lopez"
+        and current_role == "administrador"
+    )
 
     return render_template(
         "invoice_view.html",
-
         invoice=invoice,
-
         items=items,
-
         service_items=service_items,
-
         settings=settings,
+        can_edit_invoice=can_edit_invoice,
     )
+
 
 @app.route(
     "/facturas/<int:invoice_id>/eliminar",
@@ -3669,47 +3582,6 @@ def invoice_delete(invoice_id: int):
 
     return redirect(
         url_for("invoices")
-    )
-
-
-    # =====================================================
-    # PERMISO PARA EDITAR REMISIONES
-    # =====================================================
-
-    current_username = str(
-        g.user["username"] or ""
-    ).strip().lower()
-
-    current_full_name = str(
-        g.user["full_name"] or ""
-    ).strip().lower()
-
-    current_role = str(
-        g.user["role"] or ""
-    ).strip().lower()
-
-
-    can_edit_invoice = (
-        current_role == "administrador"
-        and (
-            current_username == "arturo.lopez"
-            or current_full_name in (
-                "arturo lópez",
-                "arturo lopez"
-            )
-        )
-    )
-
-
-    return render_template(
-        "invoice_view.html",
-
-        invoice=invoice,
-        items=items,
-        service_items=service_items,
-        settings=settings,
-
-        can_edit_invoice=can_edit_invoice
     )
 
 
@@ -4218,160 +4090,301 @@ def invoice_pdf(invoice_id: int):
     pdf_path = generate_invoice_pdf(invoice_id)
     return send_file(pdf_path, as_attachment=True, download_name=pdf_path.name)
 
+@app.route("/facturas/<int:invoice_id>/pdf/ver")
+@login_required
+def invoice_pdf_view(invoice_id: int):
+
+    pdf_path = generate_invoice_pdf(
+        invoice_id
+    )
+
+    return send_file(
+        pdf_path,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=pdf_path.name
+    )
+
 
 def generate_invoice_pdf(invoice_id: int) -> Path:
-
+    """Genera una remisión compacta en PDF y devuelve la ruta del archivo creado."""
     with db_conn() as conn:
-
         invoice = conn.execute(
             """
             SELECT
                 i.*,
                 u.full_name AS user_name
-
             FROM invoices i
-
-            LEFT JOIN users u
-                ON u.id=i.user_id
-
-            WHERE i.id=?
+            LEFT JOIN users u ON u.id = i.user_id
+            WHERE i.id = ?
             """,
-            (
-                invoice_id,
-            ),
+            (invoice_id,),
         ).fetchone()
-
 
         items = conn.execute(
             """
             SELECT *
             FROM invoice_items
-            WHERE invoice_id=?
+            WHERE invoice_id = ?
+            ORDER BY id
             """,
-            (
-                invoice_id,
-            ),
+            (invoice_id,),
         ).fetchall()
-
 
         service_items = conn.execute(
             """
             SELECT *
             FROM invoice_service_items
-            WHERE invoice_id=?
+            WHERE invoice_id = ?
+            ORDER BY id
             """,
-            (
-                invoice_id,
-            ),
+            (invoice_id,),
         ).fetchall()
 
-
-        settings = get_settings(
-            conn
-        )
-
+        settings = get_settings(conn)
 
     if not invoice:
+        raise ValueError("Remisión no encontrada")
 
-        raise ValueError(
-            "Remisión no encontrada"
-        )
+    path = INVOICE_DIR / f"Remision_{invoice['number'].replace('-', '_')}.pdf"
 
-
-    path = (
-        INVOICE_DIR
-        /
-        f"Remision_{invoice['number'].replace('-', '_')}.pdf"
-    )
-
-
-    # =====================================================
-    # FORMATO COMPACTO
-    # =====================================================
-
+    # Hoja carta con márgenes reducidos para que remisiones normales quepan en una página.
     doc = SimpleDocTemplate(
         str(path),
-
         pagesize=letter,
-
         rightMargin=7 * mm,
         leftMargin=7 * mm,
-
         topMargin=7 * mm,
         bottomMargin=7 * mm,
     )
 
-
     styles = getSampleStyleSheet()
-
-
     styles.add(
         ParagraphStyle(
             name="InvoiceSmall",
-
             parent=styles["Normal"],
-
+            fontName="Helvetica",
             fontSize=7,
-
             leading=8.2,
-
             spaceAfter=0,
-
             spaceBefore=0,
         )
     )
-
-
     styles.add(
         ParagraphStyle(
             name="InvoiceTiny",
-
             parent=styles["Normal"],
-
-            fontSize=6.2,
-
-            leading=7,
-
+            fontName="Helvetica",
+            fontSize=6.3,
+            leading=7.2,
             spaceAfter=0,
-
             spaceBefore=0,
         )
     )
-
-
     styles.add(
         ParagraphStyle(
-            name="InvoiceTitle",
-
+            name="InvoiceFooter",
             parent=styles["Normal"],
-
-            fontSize=11,
-
-            leading=12,
-
+            fontName="Helvetica",
+            fontSize=6.2,
+            leading=7,
             alignment=1,
-
+            textColor=colors.HexColor("#555555"),
             spaceAfter=0,
-
             spaceBefore=0,
         )
     )
 
-
-    small = styles[
-        "InvoiceSmall"
-    ]
-
-    tiny = styles[
-        "InvoiceTiny"
-    ]
-
-    title_style = styles[
-        "InvoiceTitle"
-    ]
-
-
+    small = styles["InvoiceSmall"]
+    tiny = styles["InvoiceTiny"]
+    footer_style = styles["InvoiceFooter"]
     story = []
+
+    # Encabezado
+    business_name = settings["business_name"] or ""
+    nit = settings["nit"] or ""
+    address = settings["address"] or ""
+    phone = settings["phone"] or ""
+    email = settings["email"] or ""
+
+    issued_at = str(invoice["issued_at"] or "")
+    issued_date = issued_at[:10] if issued_at else "-"
+    status = invoice["status"] or "-"
+
+    header_left = Paragraph(
+        f"<b>{business_name}</b><br/>{nit}<br/>{address}<br/>{phone} - {email}",
+        small,
+    )
+    header_right = Paragraph(
+        "<b>REMISIÓN</b>"
+        f"<br/><font size='10'><b>{invoice['number']}</b></font>"
+        f"<br/>Fecha: {issued_date}"
+        f"<br/>Estado: {status}",
+        small,
+    )
+
+    header = Table(
+        [[header_left, header_right]],
+        colWidths=[125 * mm, 66 * mm],
+    )
+    header.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#1F4E78")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#D9EAF7")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
+    story.append(header)
+    story.append(Spacer(1, 2.5 * mm))
+
+    # Datos del cliente
+    customer_name = invoice["customer_name"] or "-"
+    customer_document = invoice["customer_document"] or "-"
+    customer_phone = invoice["customer_phone"] or "-"
+    customer_address = invoice["customer_address"] or "-"
+    vehicle_plate = invoice["vehicle_plate"] or "-"
+    payment_method = invoice["payment_method"] or "-"
+    salesperson_name = invoice["salesperson_name"] or "-"
+    user_name = invoice["user_name"] or "-"
+    notes = invoice["notes"] or "-"
+
+    customer = Table(
+        [
+            [
+                "Cliente",
+                Paragraph(str(customer_name), tiny),
+                "Documento",
+                Paragraph(str(customer_document), tiny),
+            ],
+            [
+                "Teléfono",
+                Paragraph(str(customer_phone), tiny),
+                "Dirección",
+                Paragraph(str(customer_address), tiny),
+            ],
+            [
+                "Placa",
+                Paragraph(str(vehicle_plate), tiny),
+                "Forma de pago",
+                Paragraph(str(payment_method), tiny),
+            ],
+            [
+                "Vendedor",
+                Paragraph(str(salesperson_name), tiny),
+                "Usuario",
+                Paragraph(str(user_name), tiny),
+            ],
+            [
+                "Observaciones",
+                Paragraph(str(notes), tiny),
+                "",
+                "",
+            ],
+        ],
+        colWidths=[23 * mm, 72 * mm, 27 * mm, 69 * mm],
+    )
+    customer.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#999999")),
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#EEF3F8")),
+                ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#EEF3F8")),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 6.7),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    story.append(customer)
+    story.append(Spacer(1, 2.5 * mm))
+
+    # Detalle de productos y servicios
+    data = [["Tipo", "Descripción", "Cant.", "Valor unitario", "Total"]]
+
+    for item in items:
+        data.append(
+            [
+                "Producto",
+                Paragraph(str(item["description"] or ""), tiny),
+                f"{float(item['quantity'] or 0):g}",
+                money(item["unit_price"]),
+                money(item["line_total"]),
+            ]
+        )
+
+    for item in service_items:
+        worker_name = str(item["worker_name"] or "").strip()
+        service_text = str(item["service_name"] or "")
+        if worker_name:
+            service_text += f" - {worker_name}"
+        data.append(
+            [
+                "Servicio",
+                Paragraph(service_text, tiny),
+                f"{float(item['quantity'] or 0):g}",
+                money(item["unit_price"]),
+                money(item["line_total"]),
+            ]
+        )
+
+    data.extend(
+        [
+            ["", "", "", "Subtotal", money(invoice["subtotal"])],
+            ["", "", "", "Impuesto", money(invoice["tax"])],
+            ["", "", "", "TOTAL", money(invoice["total"])],
+        ]
+    )
+
+    table = Table(
+        data,
+        colWidths=[22 * mm, 91 * mm, 14 * mm, 31 * mm, 33 * mm],
+        repeatRows=1,
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("FONTSIZE", (0, 0), (-1, -1), 6.7),
+                ("GRID", (0, 0), (-1, -4), 0.3, colors.HexColor("#999999")),
+                ("LINEABOVE", (3, -3), (-1, -1), 0.4, colors.HexColor("#777777")),
+                ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
+                ("BACKGROUND", (3, -1), (-1, -1), colors.HexColor("#D9EAF7")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.8),
+            ]
+        )
+    )
+    story.append(table)
+    story.append(Spacer(1, 3 * mm))
+    story.append(
+        Paragraph(
+            "Documento de remisión. Gracias por su compra.",
+            footer_style,
+        )
+    )
+
+    # Construir y retornar: ambas líneas son obligatorias.
+    doc.build(story)
+    return path
+
 
 @app.route("/configuracion", methods=["GET", "POST"])
 @role_required("administrador")
