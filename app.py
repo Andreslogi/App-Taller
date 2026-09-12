@@ -109,6 +109,43 @@ def role_required(*roles):
         return wrapped_view
     return decorator
 
+def arturo_required(view):
+
+    @wraps(view)
+    def wrapped_view(**kwargs):
+
+        if g.user is None:
+
+            flash(
+                "Debes iniciar sesión.",
+                "warning"
+            )
+
+            return redirect(
+                url_for("login")
+            )
+
+        username = str(
+            g.user["username"]
+            or
+            ""
+        ).strip().lower()
+
+        if username != "arturo.lopez":
+
+            flash(
+                "Solo Arturo López puede eliminar remisiones.",
+                "danger"
+            )
+
+            return redirect(
+                url_for("invoices")
+            )
+
+        return view(**kwargs)
+
+    return wrapped_view
+
 
 def arturo_required(view):
 
@@ -3344,35 +3381,53 @@ def invoice_view(invoice_id: int):
             SELECT
                 i.*,
                 u.full_name AS user_name
+
             FROM invoices i
 
             LEFT JOIN users u
-                ON u.id=i.user_id
+                ON u.id = i.user_id
 
-            WHERE i.id=?
+            WHERE i.id = ?
             """,
-            (invoice_id,)
+            (
+                invoice_id,
+            )
         ).fetchone()
+
 
         items = conn.execute(
             """
             SELECT *
             FROM invoice_items
-            WHERE invoice_id=?
+
+            WHERE invoice_id = ?
+
+            ORDER BY id
             """,
-            (invoice_id,)
+            (
+                invoice_id,
+            )
         ).fetchall()
+
 
         service_items = conn.execute(
             """
             SELECT *
             FROM invoice_service_items
-            WHERE invoice_id=?
+
+            WHERE invoice_id = ?
+
+            ORDER BY id
             """,
-            (invoice_id,)
+            (
+                invoice_id,
+            )
         ).fetchall()
 
-        settings = get_settings(conn)
+
+        settings = get_settings(
+            conn
+        )
 
 
     if not invoice:
@@ -3385,6 +3440,236 @@ def invoice_view(invoice_id: int):
         return redirect(
             url_for("invoices")
         )
+
+
+    return render_template(
+        "invoice_view.html",
+
+        invoice=invoice,
+
+        items=items,
+
+        service_items=service_items,
+
+        settings=settings,
+    )
+
+@app.route(
+    "/facturas/<int:invoice_id>/eliminar",
+    methods=["POST"]
+)
+@arturo_required
+def invoice_delete(invoice_id: int):
+
+    try:
+
+        with db_conn() as conn:
+
+            invoice = conn.execute(
+                """
+                SELECT *
+                FROM invoices
+                WHERE id=?
+                """,
+                (invoice_id,),
+            ).fetchone()
+
+            if not invoice:
+
+                flash(
+                    "La remisión no existe.",
+                    "warning"
+                )
+
+                return redirect(
+                    url_for("invoices")
+                )
+
+
+            # =============================================
+            # PRODUCTOS DE LA REMISIÓN
+            # =============================================
+
+            items = conn.execute(
+                """
+                SELECT *
+                FROM invoice_items
+                WHERE invoice_id=?
+                """,
+                (invoice_id,),
+            ).fetchall()
+
+
+            # =============================================
+            # DEVOLVER PRODUCTOS AL INVENTARIO
+            # =============================================
+
+            for item in items:
+
+                if item["product_id"]:
+
+                    conn.execute(
+                        """
+                        UPDATE products
+
+                        SET
+                            stock = stock + ?,
+                            updated_at = CURRENT_TIMESTAMP
+
+                        WHERE id = ?
+                        """,
+                        (
+                            float(
+                                item["quantity"]
+                                or
+                                0
+                            ),
+                            item["product_id"],
+                        ),
+                    )
+
+
+            # =============================================
+            # ELIMINAR MOVIMIENTOS GENERADOS POR REMISIÓN
+            # =============================================
+
+            conn.execute(
+                """
+                DELETE FROM movements
+
+                WHERE reference = ?
+                  AND movement_type = 'Venta'
+                """,
+                (
+                    invoice["number"],
+                ),
+            )
+
+
+            # =============================================
+            # CUENTAS POR COBRAR
+            # =============================================
+
+            receivable = conn.execute(
+                """
+                SELECT id
+                FROM accounts_receivable
+                WHERE invoice_id=?
+                """,
+                (
+                    invoice_id,
+                ),
+            ).fetchone()
+
+
+            if receivable:
+
+                conn.execute(
+                    """
+                    DELETE FROM accounts_receivable_payments
+                    WHERE receivable_id=?
+                    """,
+                    (
+                        receivable["id"],
+                    ),
+                )
+
+                conn.execute(
+                    """
+                    DELETE FROM accounts_receivable
+                    WHERE id=?
+                    """,
+                    (
+                        receivable["id"],
+                    ),
+                )
+
+
+            # =============================================
+            # DETALLES
+            # =============================================
+
+            conn.execute(
+                """
+                DELETE FROM invoice_service_items
+                WHERE invoice_id=?
+                """,
+                (
+                    invoice_id,
+                ),
+            )
+
+
+            conn.execute(
+                """
+                DELETE FROM invoice_items
+                WHERE invoice_id=?
+                """,
+                (
+                    invoice_id,
+                ),
+            )
+
+
+            # =============================================
+            # REMISIÓN
+            # =============================================
+
+            conn.execute(
+                """
+                DELETE FROM invoices
+                WHERE id=?
+                """,
+                (
+                    invoice_id,
+                ),
+            )
+
+
+        # =============================================
+        # BORRAR PDF GUARDADO SI EXISTE
+        # =============================================
+
+        try:
+
+            pdf_path = (
+                INVOICE_DIR
+                /
+                f"Remision_{invoice['number'].replace('-', '_')}.pdf"
+            )
+
+            if pdf_path.exists():
+
+                pdf_path.unlink()
+
+        except Exception:
+
+            pass
+
+
+        flash(
+            f"Remisión {invoice['number']} eliminada. "
+            "El inventario fue restaurado.",
+            "success"
+        )
+
+
+    except Exception as exc:
+
+        print(
+            "ERROR ELIMINANDO REMISIÓN:",
+            repr(exc)
+        )
+
+        flash(
+            "No fue posible eliminar la remisión.",
+            "danger"
+        )
+
+
+    return redirect(
+        url_for("invoices")
+    )
 
 
     # =====================================================
@@ -3935,85 +4220,158 @@ def invoice_pdf(invoice_id: int):
 
 
 def generate_invoice_pdf(invoice_id: int) -> Path:
+
     with db_conn() as conn:
-        invoice = conn.execute("""SELECT i.*, u.full_name AS user_name FROM invoices i
-            LEFT JOIN users u ON u.id=i.user_id WHERE i.id=?""", (invoice_id,)).fetchone()
-        items = conn.execute("SELECT * FROM invoice_items WHERE invoice_id=?", (invoice_id,)).fetchall()
-        service_items = conn.execute("SELECT * FROM invoice_service_items WHERE invoice_id=?", (invoice_id,)).fetchall()
-        settings = get_settings(conn)
+
+        invoice = conn.execute(
+            """
+            SELECT
+                i.*,
+                u.full_name AS user_name
+
+            FROM invoices i
+
+            LEFT JOIN users u
+                ON u.id=i.user_id
+
+            WHERE i.id=?
+            """,
+            (
+                invoice_id,
+            ),
+        ).fetchone()
+
+
+        items = conn.execute(
+            """
+            SELECT *
+            FROM invoice_items
+            WHERE invoice_id=?
+            """,
+            (
+                invoice_id,
+            ),
+        ).fetchall()
+
+
+        service_items = conn.execute(
+            """
+            SELECT *
+            FROM invoice_service_items
+            WHERE invoice_id=?
+            """,
+            (
+                invoice_id,
+            ),
+        ).fetchall()
+
+
+        settings = get_settings(
+            conn
+        )
+
+
     if not invoice:
-        raise ValueError("Remisión no encontrada")
 
-    path = INVOICE_DIR / f"Remision_{invoice['number'].replace('-', '_')}.pdf"
-    doc = SimpleDocTemplate(str(path), pagesize=letter, rightMargin=16*mm, leftMargin=16*mm, topMargin=15*mm, bottomMargin=15*mm)
+        raise ValueError(
+            "Remisión no encontrada"
+        )
+
+
+    path = (
+        INVOICE_DIR
+        /
+        f"Remision_{invoice['number'].replace('-', '_')}.pdf"
+    )
+
+
+    # =====================================================
+    # FORMATO COMPACTO
+    # =====================================================
+
+    doc = SimpleDocTemplate(
+        str(path),
+
+        pagesize=letter,
+
+        rightMargin=7 * mm,
+        leftMargin=7 * mm,
+
+        topMargin=7 * mm,
+        bottomMargin=7 * mm,
+    )
+
+
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="Small", parent=styles["Normal"], fontSize=8.5, leading=11))
+
+
+    styles.add(
+        ParagraphStyle(
+            name="InvoiceSmall",
+
+            parent=styles["Normal"],
+
+            fontSize=7,
+
+            leading=8.2,
+
+            spaceAfter=0,
+
+            spaceBefore=0,
+        )
+    )
+
+
+    styles.add(
+        ParagraphStyle(
+            name="InvoiceTiny",
+
+            parent=styles["Normal"],
+
+            fontSize=6.2,
+
+            leading=7,
+
+            spaceAfter=0,
+
+            spaceBefore=0,
+        )
+    )
+
+
+    styles.add(
+        ParagraphStyle(
+            name="InvoiceTitle",
+
+            parent=styles["Normal"],
+
+            fontSize=11,
+
+            leading=12,
+
+            alignment=1,
+
+            spaceAfter=0,
+
+            spaceBefore=0,
+        )
+    )
+
+
+    small = styles[
+        "InvoiceSmall"
+    ]
+
+    tiny = styles[
+        "InvoiceTiny"
+    ]
+
+    title_style = styles[
+        "InvoiceTitle"
+    ]
+
+
     story = []
-
-    header = Table([
-        [Paragraph(f"<b>{settings['business_name']}</b><br/>{settings['nit']}<br/>{settings['address']}<br/>{settings['phone']} - {settings['email']}", styles["Small"]),
-         Paragraph(f"<b>REMISIÓN</b><br/><font size=13>{invoice['number']}</font><br/>Fecha: {invoice['issued_at'][:10]}<br/>Estado: {invoice['status']}", styles["Small"])]
-    ], colWidths=[110*mm, 70*mm])
-    header.setStyle(TableStyle([
-        ("BOX", (0,0), (-1,-1), 0.8, colors.HexColor("#1F4E78")),
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("BACKGROUND", (1,0), (1,0), colors.HexColor("#D9EAF7")),
-        ("LEFTPADDING", (0,0), (-1,-1), 8), ("RIGHTPADDING", (0,0), (-1,-1), 8),
-        ("TOPPADDING", (0,0), (-1,-1), 8), ("BOTTOMPADDING", (0,0), (-1,-1), 8),
-    ]))
-    story.extend([header, Spacer(1, 6*mm)])
-
-    customer = Table([
-        ["Cliente", invoice["customer_name"], "Documento", invoice["customer_document"] or "-"],
-        ["Teléfono", invoice["customer_phone"] or "-", "Dirección", invoice["customer_address"] or "-"],
-        ["Placa", invoice["vehicle_plate"] or "-", "Forma de pago", invoice["payment_method"]],
-        ["Vendedor", invoice["salesperson_name"] or "-", "Usuario", invoice["user_name"] or "-"],
-        ["Observaciones", invoice["notes"] or "-", "", ""],
-    ], colWidths=[25*mm, 65*mm, 28*mm, 62*mm])
-    customer.setStyle(TableStyle([
-        ("GRID", (0,0), (-1,-1), 0.4, colors.grey),
-        ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#EEF3F8")),
-        ("BACKGROUND", (2,0), (2,-1), colors.HexColor("#EEF3F8")),
-        ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"), ("FONTNAME", (2,0), (2,-1), "Helvetica-Bold"),
-        ("FONTSIZE", (0,0), (-1,-1), 8), ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("PADDING", (0,0), (-1,-1), 5),
-    ]))
-    story.extend([customer, Spacer(1, 6*mm)])
-
-    data = [["Tipo", "Descripción", "Cant.", "Valor unitario", "Total"]]
-    for item in items:
-        data.append([
-            "Producto", Paragraph(item["description"], styles["Small"]), f"{item['quantity']:g}",
-            money(item["unit_price"]), money(item["line_total"])
-        ])
-    for item in service_items:
-        data.append([
-            "Servicio", Paragraph(item["service_name"], styles["Small"]), f"{item['quantity']:g}",
-            money(item["unit_price"]), money(item["line_total"])
-        ])
-    data.extend([
-        ["", "", "", "Subtotal", money(invoice["subtotal"])],
-        ["", "", "", "Impuesto", money(invoice["tax"])],
-        ["", "", "", "TOTAL", money(invoice["total"])],
-    ])
-    table = Table(data, colWidths=[25*mm, 78*mm, 16*mm, 30*mm, 31*mm], repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F4E78")),
-        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        ("ALIGN", (2,1), (-1,-1), "RIGHT"),
-        ("GRID", (0,0), (-1,-4), 0.35, colors.grey),
-        ("LINEABOVE", (3,-3), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (3,-1), (-1,-1), "Helvetica-Bold"),
-        ("BACKGROUND", (3,-1), (-1,-1), colors.HexColor("#D9EAF7")),
-        ("FONTSIZE", (0,0), (-1,-1), 8.5),
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING", (0,0), (-1,-1), 5), ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-    ]))
-    story.extend([table, Spacer(1, 9*mm), Paragraph("Documento de remisión. Gracias por su compra.", styles["Normal"])])
-    doc.build(story)
-    return path
-
 
 @app.route("/configuracion", methods=["GET", "POST"])
 @role_required("administrador")

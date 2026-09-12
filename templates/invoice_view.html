@@ -44,6 +44,38 @@
 
     {% endif %}
 
+    {% if
+        g.user
+        and
+        g.user['username']|lower == 'arturo.lopez'
+    %}
+
+    <form
+        method="post"
+        action="{{ url_for(
+            'invoice_delete',
+            invoice_id=invoice['id']
+        ) }}"
+        style="display:inline;"
+        onsubmit="
+            return confirm(
+                '¿Seguro que deseas eliminar esta remisión? ' +
+                'Los productos volverán al inventario y esta acción no se puede deshacer.'
+            );
+        "
+    >
+
+        <button
+            type="submit"
+            class="btn btn-danger"
+        >
+            Eliminar remisión
+        </button>
+
+    </form>
+
+    {% endif %}
+
 
     <a
         class="btn btn-success"
