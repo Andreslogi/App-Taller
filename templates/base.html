@@ -923,6 +923,23 @@
                 </a>
 
                 <a
+                    href="{{ url_for('extra_income.index') }}"
+                    class="nav-link
+                    {% if request.endpoint
+                        and
+                        request.endpoint.startswith('extra_income.')
+                    %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        +
+                    </span>
+
+                    Ingresos extras
+                </a>
+
+                <a
                     href="{{ url_for('profitability.profitability') }}"
                     class="nav-link
                     {% if request.endpoint

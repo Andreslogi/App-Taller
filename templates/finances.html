@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
-{% set heading='Finanzas' %}
+{% set heading='Finanzas semanales' %}
 
 {% block content %}
+
 <div class="card">
     <form method="get">
         <div class="form-grid">
@@ -16,105 +17,360 @@
         </div>
         <div class="actions" style="margin-top:14px">
             <button class="btn btn-primary" type="submit">Filtrar</button>
-            <a class="btn btn-light" href="{{ url_for('finances') }}">Todo</a>
             <a class="btn btn-light" href="{{ url_for('finances', date_from=today_iso, date_to=today_iso) }}">Hoy</a>
             <a class="btn btn-light" href="{{ url_for('finances', date_from=yesterday_iso, date_to=yesterday_iso) }}">Ayer</a>
             <a class="btn btn-light" href="{{ url_for('finances', date_from=week_start_iso, date_to=today_iso) }}">Esta semana</a>
+            <a class="btn btn-light" href="{{ url_for('finances', date_from=previous_week_start_iso, date_to=previous_week_end_iso) }}">Semana anterior</a>
             <a class="btn btn-light" href="{{ url_for('finances', date_from=month_start_iso, date_to=today_iso) }}">Este mes</a>
         </div>
     </form>
 </div>
 
+<div class="alert alert-info">
+    <strong>Criterio:</strong> productos y servicios se muestran por separado. Las remisiones de contado se reconocen como cobradas en la fecha de emisión; los pagos de crédito se reconocen en la fecha real del pago. Cuando una remisión mezcla productos y servicios, cada abono se distribuye proporcionalmente entre ambos.
+</div>
+
+<h2 style="margin:8px 0 14px;">Productos</h2>
 <div class="grid grid-4">
     <div class="card stat">
-        <div class="label">Ventas de productos</div>
+        <div class="label">Productos vendidos</div>
         <div class="value">{{ product_sales|money }}</div>
-        <div class="muted">Total registrado en repuestos/productos.</div>
+        <div class="muted">Valor de productos facturados en el periodo.</div>
     </div>
+    <div class="card stat">
+        <div class="label">Productos cobrados</div>
+        <div class="value">{{ product_collected|money }}</div>
+        <div class="muted">Caja recibida atribuible a productos.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Productos pendientes del periodo</div>
+        <div class="value">{{ pending_product_period|money }}</div>
+        <div class="muted">Saldo actual de productos en remisiones a crédito del rango.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Cartera total de productos</div>
+        <div class="value">{{ total_product_receivables|money }}</div>
+        <div class="muted">Saldo pendiente actual de productos de toda la cartera.</div>
+    </div>
+</div>
+
+<h2 style="margin:8px 0 14px;">Servicios</h2>
+<div class="grid grid-4">
     <div class="card stat">
         <div class="label">Servicios realizados</div>
-        <div class="value">{{ service_total|money }}</div>
-        <div class="muted">Valor total cobrado por servicios.</div>
+        <div class="value">{{ service_sales|money }}</div>
+        <div class="muted">Valor total de servicios facturados en el periodo.</div>
     </div>
     <div class="card stat">
-        <div class="label">30% del negocio en servicios</div>
+        <div class="label">Servicios cobrados</div>
+        <div class="value">{{ service_collected|money }}</div>
+        <div class="muted">Caja recibida atribuible a servicios.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">70% mecánicos</div>
+        <div class="value">{{ service_worker|money }}</div>
+        <div class="muted">Se liquida por servicio realizado, aunque el cliente no haya pagado.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">30% negocio en servicios</div>
         <div class="value">{{ service_business|money }}</div>
-        <div class="muted">Participación del negocio registrada en cada servicio.</div>
-    </div>
-    <div class="card stat">
-        <div class="label">Ingreso atribuido al negocio</div>
-        <div class="value">{{ business_income|money }}</div>
-        <div class="muted">Productos + participación del negocio en servicios.</div>
+        <div class="muted">Participación económica del negocio sobre servicios facturados.</div>
     </div>
 </div>
 
 <div class="grid grid-2">
     <div class="card stat">
-        <div class="label">70% trabajadores por servicios</div>
-        <div class="value">{{ service_worker|money }}</div>
+        <div class="label">Servicios pendientes del periodo</div>
+        <div class="value">{{ pending_service_period|money }}</div>
+        <div class="muted">Saldo actual de servicios dentro de remisiones a crédito del rango.</div>
     </div>
     <div class="card stat">
-        <div class="label">Remisiones en el periodo</div>
-        <div class="value">{{ invoice_count }}</div>
-        <div class="muted">Unidades de producto vendidas: {{ product_units }}</div>
+        <div class="label">Cartera total de servicios</div>
+        <div class="value">{{ total_service_receivables|money }}</div>
+        <div class="muted">Saldo pendiente actual de servicios de toda la cartera.</div>
     </div>
 </div>
 
+<h2 style="margin:8px 0 14px;">Caja semanal</h2>
+<div class="grid grid-4">
+    <div class="card stat">
+        <div class="label">Total cobrado</div>
+        <div class="value">{{ collected_total|money }}</div>
+        <div class="muted">Productos cobrados + servicios cobrados.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Ingresos extras</div>
+        <div class="value">{{ extra_income_total|money }}</div>
+        <div class="muted">Arriendos y otros ingresos recibidos.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Entradas reales</div>
+        <div class="value">{{ total_inflows|money }}</div>
+        <div class="muted">Cobros + ingresos extras.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Cartera total pendiente</div>
+        <div class="value">{{ total_receivables|money }}</div>
+        <div class="muted">Productos + servicios aún pendientes de cobro.</div>
+    </div>
+</div>
+
+<div class="grid grid-4">
+    <div class="card stat">
+        <div class="label">Gastos operativos</div>
+        <div class="value">{{ expenses_total|money }}</div>
+        <div class="muted">Gastos registrados en el módulo Gastos.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Pagos a proveedores</div>
+        <div class="value">{{ supplier_payments_total|money }}</div>
+        <div class="muted">Pagos realizados a facturas pendientes durante el periodo.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Salidas consideradas</div>
+        <div class="value">{{ total_outflows|money }}</div>
+        <div class="muted">70% mecánicos + gastos + pagos a proveedores.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Flujo neto semanal</div>
+        <div class="value">{{ net_cash_flow|money }}</div>
+        <div class="muted">Entradas reales - salidas consideradas.</div>
+    </div>
+</div>
+
+<div class="grid grid-4">
+    <div class="card stat">
+        <div class="label">Remisiones emitidas</div>
+        <div class="value">{{ invoice_count }}</div>
+        <div class="muted">Cantidad de remisiones creadas en el periodo.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Total remisiones emitidas</div>
+        <div class="value">{{ invoice_total_issued|money }}</div>
+        <div class="muted">Total documental de las remisiones del periodo.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Cobro directo</div>
+        <div class="value">{{ direct_collected|money }}</div>
+        <div class="muted">Remisiones no crédito cobradas en el periodo.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Cobros de cartera</div>
+        <div class="value">{{ credit_payments|money }}</div>
+        <div class="muted">Abonos y pagos de crédito recibidos en el periodo.</div>
+    </div>
+</div>
+
+{% if tax_issued %}
 <div class="alert alert-warning">
-    Esta vista muestra ingresos registrados por ventas, no utilidad neta. Para calcular rentabilidad real todavía debemos descontar el costo de los productos y los demás gastos del negocio. Las ventas a crédito se cuentan cuando se registra la remisión, aunque estén pendientes de cobro.
+    En el periodo se facturaron {{ tax_issued|money }} en impuestos. Para que el total cobrado siempre concilie con la caja, los cobros se distribuyen proporcionalmente entre productos y servicios incluyendo su participación correspondiente del impuesto.
+</div>
+{% endif %}
+
+<div class="alert alert-warning">
+    <strong>No dupliques salidas:</strong> el 70% de mecánicos ya se descuenta automáticamente aquí. No lo registres otra vez en Gastos. Los pagos a proveedores también se descuentan desde Facturas pendientes cuando realmente se registra su pago.
 </div>
 
 <div class="card table-wrap">
-    <h3>Resumen por día</h3>
+    <h3>Resumen diario de caja</h3>
     <table class="table">
         <thead>
             <tr>
                 <th>Fecha</th>
-                <th class="right">Productos vendidos</th>
-                <th class="right">Servicios totales</th>
-                <th class="right">30% negocio servicios</th>
-                <th class="right">Ingreso negocio</th>
+                <th class="right">Productos cobrados</th>
+                <th class="right">Servicios cobrados</th>
+                <th class="right">Ingresos extra</th>
+                <th class="right">70% mecánicos</th>
+                <th class="right">Gastos</th>
+                <th class="right">Proveedores</th>
+                <th class="right">Flujo neto</th>
             </tr>
         </thead>
         <tbody>
         {% for row in daily %}
             <tr>
                 <td>{{ row.activity_date }}</td>
-                <td class="right">{{ row.product_sales|money }}</td>
-                <td class="right">{{ row.service_total|money }}</td>
-                <td class="right">{{ row.service_business|money }}</td>
-                <td class="right"><strong>{{ row.business_income|money }}</strong></td>
+                <td class="right">{{ row.product_collected|money }}</td>
+                <td class="right">{{ row.service_collected|money }}</td>
+                <td class="right">{{ row.extra_income|money }}</td>
+                <td class="right">{{ row.worker_total|money }}</td>
+                <td class="right">{{ row.expenses|money }}</td>
+                <td class="right">{{ row.supplier_payments|money }}</td>
+                <td class="right"><strong>{{ row.net_cash_flow|money }}</strong></td>
             </tr>
         {% else %}
-            <tr><td colspan="5" class="muted">No hay ventas ni servicios en el periodo seleccionado.</td></tr>
+            <tr><td colspan="8" class="muted">No hay movimientos en el periodo seleccionado.</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
 
 <div class="card table-wrap">
-    <h3>Ventas por producto</h3>
+    <h3>Dinero cobrado en el periodo</h3>
     <table class="table">
         <thead>
             <tr>
-                <th>Código</th>
-                <th>Producto</th>
-                <th class="right">Cantidad vendida</th>
-                <th class="right">Total vendido</th>
+                <th>Fecha</th>
+                <th>Origen</th>
+                <th>Remisión</th>
+                <th>Cliente</th>
+                <th>Forma de pago</th>
+                <th class="right">Productos</th>
+                <th class="right">Servicios</th>
+                <th class="right">Total cobrado</th>
             </tr>
         </thead>
         <tbody>
-        {% for row in product_detail %}
+        {% for row in collected_detail %}
             <tr>
-                <td>{{ row.code }}</td>
-                <td>{{ row.description }}</td>
-                <td class="right">{{ row.quantity_total }}</td>
-                <td class="right"><strong>{{ row.sales_total|money }}</strong></td>
+                <td>{{ row.collection_date }}</td>
+                <td>{{ row.source_type }}</td>
+                <td>{{ row.number }}</td>
+                <td>{{ row.customer_name }}</td>
+                <td>{{ row.payment_method or '-' }}</td>
+                <td class="right">{{ row.product_amount|money }}</td>
+                <td class="right">{{ row.service_amount|money }}</td>
+                <td class="right"><strong>{{ row.amount|money }}</strong></td>
             </tr>
         {% else %}
-            <tr><td colspan="4" class="muted">No hay productos vendidos en el periodo seleccionado.</td></tr>
+            <tr><td colspan="8" class="muted">No se registraron cobros en el periodo.</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
+
+<div class="card table-wrap">
+    <h3>Cartera originada en el periodo</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Remisión</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th class="right">Total crédito</th>
+                <th class="right">Abonado</th>
+                <th class="right">Productos pendientes</th>
+                <th class="right">Servicios pendientes</th>
+                <th class="right">Saldo total</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in period_receivables %}
+            <tr>
+                <td><a href="{{ url_for('invoice_view', invoice_id=row.invoice_id) }}">{{ row.number }}</a></td>
+                <td>{{ row.issued_at|string|truncate(10, True, '') }}</td>
+                <td>{{ row.customer_name }}</td>
+                <td class="right">{{ row.original_amount|money }}</td>
+                <td class="right">{{ row.paid_amount|money }}</td>
+                <td class="right">{{ row.product_pending|money }}</td>
+                <td class="right">{{ row.service_pending|money }}</td>
+                <td class="right"><strong>{{ row.balance|money }}</strong></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="8" class="muted">No hay remisiones a crédito en el periodo.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="grid grid-2">
+    <div class="card table-wrap">
+        <h3>Liquidación de mecánicos</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Mecánico</th>
+                    <th class="right">Servicios</th>
+                    <th class="right">70% a liquidar</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in worker_detail %}
+                <tr>
+                    <td>{{ row.worker_name }}</td>
+                    <td class="right">{{ row.service_total|money }}</td>
+                    <td class="right"><strong>{{ row.worker_total|money }}</strong></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="3" class="muted">No hay servicios para liquidar.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card table-wrap">
+        <h3>Ingresos extras</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th class="right">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in extra_income_detail %}
+                <tr>
+                    <td>{{ row.income_date }}</td>
+                    <td>{{ row.category }} - {{ row.concept }}</td>
+                    <td class="right"><strong>{{ row.amount|money }}</strong></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="3" class="muted">No hay ingresos extras.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <div class="card table-wrap">
+        <h3>Gastos operativos</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Detalle</th>
+                    <th class="right">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in expense_detail %}
+                <tr>
+                    <td>{{ row.expense_date }}</td>
+                    <td>{{ row.category }} - {{ row.description }}</td>
+                    <td class="right"><strong>{{ row.amount|money }}</strong></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="3" class="muted">No hay gastos registrados.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card table-wrap">
+        <h3>Pagos a proveedores</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Proveedor / Factura</th>
+                    <th class="right">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in supplier_payment_detail %}
+                <tr>
+                    <td>{{ row.payment_date }}</td>
+                    <td>{{ row.supplier }} - {{ row.invoice_number }}</td>
+                    <td class="right"><strong>{{ row.amount|money }}</strong></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="3" class="muted">No hay pagos a proveedores en el periodo.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
 {% endblock %}

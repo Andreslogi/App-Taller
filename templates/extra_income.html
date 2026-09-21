@@ -1,0 +1,364 @@
+{% extends 'base.html' %}
+
+{% set heading = 'Ingresos extras' %}
+
+{% block content %}
+
+<div class="card" style="margin-bottom:20px;">
+
+    <h3>Registrar ingreso extra</h3>
+
+    <p style="color:#666;">
+        Registra aquí ingresos que no corresponden a ventas del taller,
+        por ejemplo arriendos u otros ingresos.
+    </p>
+
+    <form method="post">
+
+        <div
+            style="
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+                gap:15px;
+            "
+        >
+
+            <div>
+                <label>
+                    Fecha
+                </label>
+
+                <input
+                    type="date"
+                    name="income_date"
+                    value="{{ today }}"
+                    required
+                >
+            </div>
+
+
+            <div>
+                <label>
+                    Categoría
+                </label>
+
+                <select
+                    name="category"
+                    required
+                >
+                    <option value="">
+                        Seleccionar
+                    </option>
+
+                    <option value="Arriendo">
+                        Arriendo
+                    </option>
+
+                    <option value="Otros ingresos">
+                        Otros ingresos
+                    </option>
+
+                    <option value="Recuperaciones">
+                        Recuperaciones
+                    </option>
+
+                    <option value="Otros">
+                        Otros
+                    </option>
+                </select>
+            </div>
+
+
+            <div>
+                <label>
+                    Concepto
+                </label>
+
+                <input
+                    type="text"
+                    name="concept"
+                    placeholder="Ej: Arriendo local"
+                    required
+                >
+            </div>
+
+
+            <div>
+                <label>
+                    Valor
+                </label>
+
+                <input
+                    type="number"
+                    name="amount"
+                    min="1"
+                    step="1"
+                    placeholder="0"
+                    required
+                >
+            </div>
+
+
+            <div>
+                <label>
+                    Forma de pago
+                </label>
+
+                <select
+                    name="payment_method"
+                >
+                    <option value="Efectivo">
+                        Efectivo
+                    </option>
+
+                    <option value="Transferencia">
+                        Transferencia
+                    </option>
+
+                    <option value="Nequi">
+                        Nequi
+                    </option>
+
+                    <option value="Daviplata">
+                        Daviplata
+                    </option>
+
+                    <option value="Otro">
+                        Otro
+                    </option>
+                </select>
+            </div>
+
+        </div>
+
+
+        <div style="margin-top:15px;">
+
+            <label>
+                Observaciones
+            </label>
+
+            <textarea
+                name="notes"
+                rows="3"
+                placeholder="Observaciones opcionales"
+            ></textarea>
+
+        </div>
+
+
+        <div style="margin-top:15px;">
+
+            <button
+                type="submit"
+                class="btn btn-primary"
+            >
+                Registrar ingreso
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<div class="card" style="margin-bottom:20px;">
+
+    <h3>Consultar ingresos</h3>
+
+    <form method="get">
+
+        <div
+            style="
+                display:flex;
+                gap:15px;
+                flex-wrap:wrap;
+                align-items:end;
+            "
+        >
+
+            <div>
+
+                <label>
+                    Desde
+                </label>
+
+                <input
+                    type="date"
+                    name="date_from"
+                    value="{{ date_from }}"
+                >
+
+            </div>
+
+
+            <div>
+
+                <label>
+                    Hasta
+                </label>
+
+                <input
+                    type="date"
+                    name="date_to"
+                    value="{{ date_to }}"
+                >
+
+            </div>
+
+
+            <div>
+
+                <button
+                    type="submit"
+                    class="btn btn-primary"
+                >
+                    Filtrar
+                </button>
+
+                <a
+                    href="{{ url_for('extra_income.index') }}"
+                    class="btn btn-light"
+                >
+                    Limpiar
+                </a>
+
+            </div>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<div
+    class="card"
+    style="
+        margin-bottom:20px;
+        padding:20px;
+    "
+>
+
+    <div style="color:#666;">
+        Total ingresos extras
+    </div>
+
+    <div
+        style="
+            font-size:30px;
+            font-weight:700;
+            margin-top:5px;
+        "
+    >
+        {{ total|money }}
+    </div>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Historial</h3>
+
+    {% if rows %}
+
+        <div class="table-wrap">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Categoría</th>
+                        <th>Concepto</th>
+                        <th>Forma de pago</th>
+                        <th>Valor</th>
+                        <th>Observaciones</th>
+                        <th></th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for row in rows %}
+
+                        <tr>
+
+                            <td>
+                                {{ row.income_date }}
+                            </td>
+
+                            <td>
+                                {{ row.category }}
+                            </td>
+
+                            <td>
+                                {{ row.concept }}
+                            </td>
+
+                            <td>
+                                {{ row.payment_method or '-' }}
+                            </td>
+
+                            <td>
+                                <strong>
+                                    {{ row.amount|money }}
+                                </strong>
+                            </td>
+
+                            <td>
+                                {{ row.notes or '-' }}
+                            </td>
+
+                            <td>
+
+                                <form
+                                    method="post"
+                                    action="{{ url_for(
+                                        'extra_income.delete',
+                                        income_id=row.id
+                                    ) }}"
+                                    onsubmit="
+                                        return confirm(
+                                            '¿Seguro que deseas eliminar este ingreso?'
+                                        );
+                                    "
+                                >
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-danger"
+                                    >
+                                        Eliminar
+                                    </button>
+
+                                </form>
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p>
+            No hay ingresos extras registrados para este período.
+        </p>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}

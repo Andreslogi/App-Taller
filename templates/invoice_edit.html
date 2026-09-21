@@ -1353,11 +1353,14 @@ function addServiceRow(
 
         <td>
 
-            <input
+            <select
                 name="service_worker[]"
-                value="${worker}"
                 required
             >
+                <option value="">Seleccionar mecánico</option>
+                <option value="Leo" ${worker === 'Leo' ? 'selected' : ''}>Leo</option>
+                <option value="Daniel" ${worker === 'Daniel' ? 'selected' : ''}>Daniel</option>
+            </select>
 
         </td>
 

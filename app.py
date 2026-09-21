@@ -26,6 +26,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from expenses_module import expenses_bp
 from profitability_module import profitability_bp
+from extra_income_module import extra_income_bp
 load_dotenv()
 
 APP_NAME = "Control de Inventario y Remisiones"
@@ -56,6 +57,7 @@ db.init_app(app)
 migrate = Migrate(app, db)
 app.register_blueprint(expenses_bp)
 app.register_blueprint(profitability_bp)
+app.register_blueprint(extra_income_bp)
 
 def money(value: Any) -> str:
     try:
@@ -1248,11 +1250,107 @@ def service_edit(service_id: int):
 @app.route("/facturas")
 @login_required
 def invoices():
-    with db_conn() as conn:
-        rows = conn.execute("""SELECT i.*, u.full_name AS user_name FROM invoices i
-            LEFT JOIN users u ON u.id=i.user_id ORDER BY i.id DESC""").fetchall()
-    return render_template("invoices.html", invoices=rows)
 
+    with db_conn() as conn:
+
+        rows = conn.execute(
+            """
+            SELECT
+                i.*,
+                u.full_name AS user_name,
+
+                CASE
+
+                    WHEN i.payment_method <> 'Crédito'
+                    THEN 'PAGADA'
+
+                    WHEN ar.id IS NULL
+                    THEN 'PENDIENTE'
+
+                    WHEN
+                        COALESCE(
+                            (
+                                SELECT SUM(arp.amount)
+                                FROM accounts_receivable_payments arp
+                                WHERE arp.receivable_id = ar.id
+                            ),
+                            0
+                        ) >= ar.original_amount
+                    THEN 'PAGADA'
+
+                    WHEN
+                        COALESCE(
+                            (
+                                SELECT SUM(arp.amount)
+                                FROM accounts_receivable_payments arp
+                                WHERE arp.receivable_id = ar.id
+                            ),
+                            0
+                        ) > 0
+                    THEN 'PAGO PARCIAL'
+
+                    ELSE 'PENDIENTE'
+
+                END AS payment_status,
+
+                COALESCE(
+                    (
+                        SELECT SUM(arp.amount)
+                        FROM accounts_receivable_payments arp
+                        WHERE arp.receivable_id = ar.id
+                    ),
+                    0
+                ) AS paid_amount,
+
+            CASE
+                WHEN i.payment_method <> 'Crédito'
+                THEN 0
+
+                WHEN (
+                    ar.original_amount
+                    -
+                    COALESCE(
+                        (
+                            SELECT SUM(arp.amount)
+                            FROM accounts_receivable_payments arp
+                            WHERE arp.receivable_id = ar.id
+                        ),
+                        0
+                    )
+                ) > 0
+
+                THEN (
+                    ar.original_amount
+                    -
+                    COALESCE(
+                        (
+                            SELECT SUM(arp.amount)
+                            FROM accounts_receivable_payments arp
+                            WHERE arp.receivable_id = ar.id
+                        ),
+                        0
+                    )
+                )
+
+                ELSE 0
+            END AS pending_amount
+            FROM invoices i
+
+            LEFT JOIN users u
+                ON u.id = i.user_id
+
+            LEFT JOIN accounts_receivable ar
+                ON ar.invoice_id = i.id
+
+            ORDER BY
+                i.id DESC
+            """
+        ).fetchall()
+
+    return render_template(
+        "invoices.html",
+        invoices=rows
+    )
 
 @app.route("/facturas/nueva", methods=["GET", "POST"])
 @login_required
@@ -1450,7 +1548,7 @@ def invoice_new():
                             (
                                 receivable_id,
                                 float(credit_initial_payment),
-                                datetime.now().date(),
+                                issued_at[:10],
                                 credit_initial_payment_method,
                                 "Abono inicial registrado al crear la remisión",
                                 g.user["id"],
@@ -1488,52 +1586,207 @@ def invoice_new():
 @app.route("/finanzas")
 @role_required("administrador")
 def finances():
-    """Resumen de ingresos registrados por productos y participación del negocio en servicios."""
-    date_from = request.args.get("date_from", "").strip()
-    date_to = request.args.get("date_to", "").strip()
+    """Cierre semanal separando productos, servicios, cartera y caja real."""
 
-    # Validar fechas para evitar filtros inválidos y conservar consultas portables SQLite/PostgreSQL.
+    today = datetime.now().date()
+    week_start = today.fromordinal(today.toordinal() - today.weekday())
+    yesterday = today.fromordinal(today.toordinal() - 1)
+    previous_week_start = week_start.fromordinal(week_start.toordinal() - 7)
+    previous_week_end = week_start.fromordinal(week_start.toordinal() - 1)
+    month_start = today.replace(day=1)
+
+    # Por defecto, Finanzas abre en la semana actual.
+    date_from = request.args.get("date_from", "").strip() or week_start.isoformat()
+    date_to = request.args.get("date_to", "").strip() or today.isoformat()
+
     for value, label in ((date_from, "Desde"), (date_to, "Hasta")):
-        if value:
-            try:
-                datetime.strptime(value, "%Y-%m-%d")
-            except ValueError:
-                flash(f"La fecha '{label}' no es válida.", "danger")
-                return redirect(url_for("finances"))
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            flash(f"La fecha '{label}' no es válida.", "danger")
+            return redirect(url_for("finances"))
 
-    if date_from and date_to and date_from > date_to:
+    if date_from > date_to:
         flash("La fecha Desde no puede ser posterior a la fecha Hasta.", "danger")
         return redirect(url_for("finances"))
 
-    filters = []
-    params = []
-    if date_from:
-        filters.append("DATE(i.issued_at) >= ?")
-        params.append(date_from)
-    if date_to:
-        filters.append("DATE(i.issued_at) <= ?")
-        params.append(date_to)
+    def D(value):
+        return Decimal(str(value or 0))
 
-    where_clause = ""
-    if filters:
-        where_clause = " WHERE " + " AND ".join(filters)
+    def allocate_amount(amount, product_base, service_base):
+        """Distribuye un cobro/saldo entre productos y servicios proporcionalmente."""
+        amount = D(amount)
+        product_base = D(product_base)
+        service_base = D(service_base)
+        base = product_base + service_base
+
+        if amount <= 0 or base <= 0:
+            return Decimal("0"), Decimal("0")
+
+        product_part = amount * product_base / base
+        service_part = amount - product_part
+        return product_part, service_part
+
+    invoice_parts_sql = """
+        SELECT
+            i.id,
+            i.number,
+            i.issued_at,
+            i.customer_name,
+            i.payment_method,
+            i.subtotal,
+            i.tax,
+            i.total,
+            COALESCE((
+                SELECT SUM(ii.line_total)
+                FROM invoice_items ii
+                WHERE ii.invoice_id = i.id
+            ), 0) AS product_total,
+            COALESCE((
+                SELECT SUM(isi.line_total)
+                FROM invoice_service_items isi
+                WHERE isi.invoice_id = i.id
+            ), 0) AS service_total
+        FROM invoices i
+    """
 
     with db_conn() as conn:
-        product_summary = conn.execute(
-            f"""
-            SELECT
-                COALESCE(SUM(ii.line_total), 0) AS product_sales,
-                COALESCE(SUM(ii.quantity), 0) AS product_units,
-                COUNT(ii.id) AS product_lines
-            FROM invoice_items ii
-            JOIN invoices i ON i.id = ii.invoice_id
-            {where_clause}
+        # ======================================================
+        # 1) REMISIONES EMITIDAS EN EL PERIODO
+        # ======================================================
+        issued_rows = conn.execute(
+            invoice_parts_sql + """
+            WHERE DATE(i.issued_at) >= ?
+              AND DATE(i.issued_at) <= ?
+            ORDER BY i.issued_at DESC, i.id DESC
             """,
-            tuple(params),
-        ).fetchone()
+            (date_from, date_to),
+        ).fetchall()
 
+        # ======================================================
+        # 2) VENTAS NO CRÉDITO COBRADAS EN EL PERIODO
+        # Se reconocen como cobradas en la fecha de la remisión.
+        # ======================================================
+        direct_rows = conn.execute(
+            invoice_parts_sql + """
+            WHERE i.payment_method <> 'Crédito'
+              AND DATE(i.issued_at) >= ?
+              AND DATE(i.issued_at) <= ?
+            ORDER BY i.issued_at DESC, i.id DESC
+            """,
+            (date_from, date_to),
+        ).fetchall()
+
+        # ======================================================
+        # 3) PAGOS DE CARTERA RECIBIDOS EN EL PERIODO
+        # El pago se distribuye proporcionalmente entre productos
+        # y servicios de la remisión.
+        # ======================================================
+        credit_payment_rows = conn.execute(
+            """
+            SELECT
+                p.id AS payment_id,
+                p.payment_date,
+                p.amount,
+                p.payment_method,
+                i.id AS invoice_id,
+                i.number,
+                i.customer_name,
+                i.subtotal,
+                i.tax,
+                i.total,
+                COALESCE((
+                    SELECT SUM(ii.line_total)
+                    FROM invoice_items ii
+                    WHERE ii.invoice_id = i.id
+                ), 0) AS product_total,
+                COALESCE((
+                    SELECT SUM(isi.line_total)
+                    FROM invoice_service_items isi
+                    WHERE isi.invoice_id = i.id
+                ), 0) AS service_total
+            FROM accounts_receivable_payments p
+            JOIN accounts_receivable ar ON ar.id = p.receivable_id
+            JOIN invoices i ON i.id = ar.invoice_id
+            WHERE DATE(p.payment_date) >= ?
+              AND DATE(p.payment_date) <= ?
+            ORDER BY p.payment_date DESC, p.id DESC
+            """,
+            (date_from, date_to),
+        ).fetchall()
+
+        # ======================================================
+        # 4) CARTERA DE REMISIONES EMITIDAS EN EL PERIODO
+        # ======================================================
+        period_receivable_rows = conn.execute(
+            """
+            SELECT
+                ar.id AS receivable_id,
+                ar.original_amount,
+                i.id AS invoice_id,
+                i.number,
+                i.issued_at,
+                i.customer_name,
+                COALESCE((
+                    SELECT SUM(p.amount)
+                    FROM accounts_receivable_payments p
+                    WHERE p.receivable_id = ar.id
+                ), 0) AS paid_amount,
+                COALESCE((
+                    SELECT SUM(ii.line_total)
+                    FROM invoice_items ii
+                    WHERE ii.invoice_id = i.id
+                ), 0) AS product_total,
+                COALESCE((
+                    SELECT SUM(isi.line_total)
+                    FROM invoice_service_items isi
+                    WHERE isi.invoice_id = i.id
+                ), 0) AS service_total
+            FROM accounts_receivable ar
+            JOIN invoices i ON i.id = ar.invoice_id
+            WHERE DATE(i.issued_at) >= ?
+              AND DATE(i.issued_at) <= ?
+            ORDER BY i.issued_at DESC, i.id DESC
+            """,
+            (date_from, date_to),
+        ).fetchall()
+
+        # ======================================================
+        # 5) CARTERA TOTAL ACTUAL
+        # ======================================================
+        all_receivable_rows = conn.execute(
+            """
+            SELECT
+                ar.id AS receivable_id,
+                ar.original_amount,
+                i.id AS invoice_id,
+                COALESCE((
+                    SELECT SUM(p.amount)
+                    FROM accounts_receivable_payments p
+                    WHERE p.receivable_id = ar.id
+                ), 0) AS paid_amount,
+                COALESCE((
+                    SELECT SUM(ii.line_total)
+                    FROM invoice_items ii
+                    WHERE ii.invoice_id = i.id
+                ), 0) AS product_total,
+                COALESCE((
+                    SELECT SUM(isi.line_total)
+                    FROM invoice_service_items isi
+                    WHERE isi.invoice_id = i.id
+                ), 0) AS service_total
+            FROM accounts_receivable ar
+            JOIN invoices i ON i.id = ar.invoice_id
+            """
+        ).fetchall()
+
+        # ======================================================
+        # 6) SERVICIOS Y 70/30 DEL PERIODO
+        # Se causan según la fecha de la remisión, sin importar si
+        # el cliente ya pagó o no.
+        # ======================================================
         service_summary = conn.execute(
-            f"""
+            """
             SELECT
                 COALESCE(SUM(isi.line_total), 0) AS service_total,
                 COALESCE(SUM(isi.worker_amount), 0) AS worker_total,
@@ -1541,108 +1794,381 @@ def finances():
                 COUNT(isi.id) AS service_lines
             FROM invoice_service_items isi
             JOIN invoices i ON i.id = isi.invoice_id
-            {where_clause}
+            WHERE DATE(i.issued_at) >= ?
+              AND DATE(i.issued_at) <= ?
             """,
-            tuple(params),
+            (date_from, date_to),
         ).fetchone()
 
-        invoice_summary = conn.execute(
-            f"""
-            SELECT COUNT(*) AS invoice_count
-            FROM invoices i
-            {where_clause}
+        # ======================================================
+        # 7) INGRESOS EXTRA
+        # ======================================================
+        extra_income_row = conn.execute(
+            """
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM extra_income
+            WHERE income_date >= ?
+              AND income_date <= ?
             """,
-            tuple(params),
+            (date_from, date_to),
         ).fetchone()
 
-        daily = conn.execute(
-            f"""
-            SELECT
-                activity_date,
-                COALESCE(SUM(product_sales), 0) AS product_sales,
-                COALESCE(SUM(service_total), 0) AS service_total,
-                COALESCE(SUM(service_business), 0) AS service_business
-            FROM (
-                SELECT
-                    DATE(i.issued_at) AS activity_date,
-                    COALESCE(SUM(ii.line_total), 0) AS product_sales,
-                    0 AS service_total,
-                    0 AS service_business
-                FROM invoice_items ii
-                JOIN invoices i ON i.id = ii.invoice_id
-                {where_clause}
-                GROUP BY DATE(i.issued_at)
-
-                UNION ALL
-
-                SELECT
-                    DATE(i.issued_at) AS activity_date,
-                    0 AS product_sales,
-                    COALESCE(SUM(isi.line_total), 0) AS service_total,
-                    COALESCE(SUM(isi.business_amount), 0) AS service_business
-                FROM invoice_service_items isi
-                JOIN invoices i ON i.id = isi.invoice_id
-                {where_clause}
-                GROUP BY DATE(i.issued_at)
-            ) finance_daily
-            GROUP BY activity_date
-            ORDER BY activity_date DESC
+        extra_income_detail = conn.execute(
+            """
+            SELECT income_date, category, concept, amount, payment_method
+            FROM extra_income
+            WHERE income_date >= ?
+              AND income_date <= ?
+            ORDER BY income_date DESC, id DESC
             """,
-            tuple(params) + tuple(params),
+            (date_from, date_to),
         ).fetchall()
 
-        product_detail = conn.execute(
-            f"""
-            SELECT
-                ii.code,
-                ii.description,
-                COALESCE(SUM(ii.quantity), 0) AS quantity_total,
-                COALESCE(SUM(ii.line_total), 0) AS sales_total
-            FROM invoice_items ii
-            JOIN invoices i ON i.id = ii.invoice_id
-            {where_clause}
-            GROUP BY ii.code, ii.description
-            ORDER BY sales_total DESC, ii.description ASC
+        # ======================================================
+        # 8) GASTOS OPERATIVOS
+        # ======================================================
+        expenses_row = conn.execute(
+            """
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM expenses
+            WHERE expense_date >= ?
+              AND expense_date <= ?
             """,
-            tuple(params),
+            (date_from, date_to),
+        ).fetchone()
+
+        # ======================================================
+        # 9) PAGOS REALES A PROVEEDORES
+        # No son gasto operativo/rentabilidad, pero sí salida de caja.
+        # ======================================================
+        supplier_payments_row = conn.execute(
+            """
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM accounts_payable_payments
+            WHERE payment_date >= ?
+              AND payment_date <= ?
+            """,
+            (date_from, date_to),
+        ).fetchone()
+
+        # ======================================================
+        # 10) LIQUIDACIÓN POR MECÁNICO
+        # ======================================================
+        worker_detail = conn.execute(
+            """
+            SELECT
+                isi.worker_name,
+                COALESCE(SUM(isi.line_total), 0) AS service_total,
+                COALESCE(SUM(isi.worker_amount), 0) AS worker_total,
+                COUNT(*) AS service_lines
+            FROM invoice_service_items isi
+            JOIN invoices i ON i.id = isi.invoice_id
+            WHERE DATE(i.issued_at) >= ?
+              AND DATE(i.issued_at) <= ?
+              AND TRIM(COALESCE(isi.worker_name, '')) <> ''
+            GROUP BY isi.worker_name
+            ORDER BY worker_total DESC, isi.worker_name ASC
+            """,
+            (date_from, date_to),
         ).fetchall()
 
-    product_sales = Decimal(str(product_summary["product_sales"] or 0))
-    service_total = Decimal(str(service_summary["service_total"] or 0))
-    service_worker = Decimal(str(service_summary["worker_total"] or 0))
-    service_business = Decimal(str(service_summary["business_total"] or 0))
-    business_income = product_sales + service_business
+        # ======================================================
+        # 11) GASTOS Y PAGOS A PROVEEDORES - DETALLE
+        # ======================================================
+        expense_detail = conn.execute(
+            """
+            SELECT expense_date, category, description, amount, payment_method
+            FROM expenses
+            WHERE expense_date >= ?
+              AND expense_date <= ?
+            ORDER BY expense_date DESC, id DESC
+            """,
+            (date_from, date_to),
+        ).fetchall()
 
-    daily_rows = []
-    for row in daily:
-        item = dict(row)
-        item["business_income"] = (
-            Decimal(str(item.get("product_sales") or 0))
-            + Decimal(str(item.get("service_business") or 0))
+        supplier_payment_detail = conn.execute(
+            """
+            SELECT
+                p.payment_date,
+                p.amount,
+                p.payment_method,
+                ap.supplier,
+                ap.invoice_number
+            FROM accounts_payable_payments p
+            JOIN accounts_payable ap ON ap.id = p.payable_id
+            WHERE p.payment_date >= ?
+              AND p.payment_date <= ?
+            ORDER BY p.payment_date DESC, p.id DESC
+            """,
+            (date_from, date_to),
+        ).fetchall()
+
+    # ==========================================================
+    # VENTAS EMITIDAS: PRODUCTOS Y SERVICIOS SEPARADOS
+    # ==========================================================
+    product_sales = sum((D(r["product_total"]) for r in issued_rows), Decimal("0"))
+    service_sales = sum((D(r["service_total"]) for r in issued_rows), Decimal("0"))
+    tax_issued = sum((D(r["tax"]) for r in issued_rows), Decimal("0"))
+    invoice_total_issued = sum((D(r["total"]) for r in issued_rows), Decimal("0"))
+    invoice_count = len(issued_rows)
+
+    # ==========================================================
+    # COBROS DIRECTOS: SEPARADOS ENTRE PRODUCTOS Y SERVICIOS
+    # ==========================================================
+    direct_product_collected = Decimal("0")
+    direct_service_collected = Decimal("0")
+    collected_detail = []
+
+    for row in direct_rows:
+        product_part, service_part = allocate_amount(
+            row["total"],
+            row["product_total"],
+            row["service_total"],
         )
-        daily_rows.append(item)
+        direct_product_collected += product_part
+        direct_service_collected += service_part
+        collected_detail.append({
+            "collection_date": str(row["issued_at"])[:10],
+            "source_type": "Venta directa",
+            "number": row["number"],
+            "customer_name": row["customer_name"],
+            "payment_method": row["payment_method"],
+            "product_amount": product_part,
+            "service_amount": service_part,
+            "amount": D(row["total"]),
+        })
 
-    now = datetime.now().date()
-    yesterday = now.fromordinal(now.toordinal() - 1)
-    week_start = now.fromordinal(now.toordinal() - now.weekday())
-    month_start = now.replace(day=1)
+    # ==========================================================
+    # COBROS DE CARTERA: CADA ABONO SE DISTRIBUYE PROPORCIONALMENTE
+    # ==========================================================
+    credit_product_collected = Decimal("0")
+    credit_service_collected = Decimal("0")
+
+    for row in credit_payment_rows:
+        product_part, service_part = allocate_amount(
+            row["amount"],
+            row["product_total"],
+            row["service_total"],
+        )
+        credit_product_collected += product_part
+        credit_service_collected += service_part
+        collected_detail.append({
+            "collection_date": str(row["payment_date"])[:10],
+            "source_type": "Cobro de cartera",
+            "number": row["number"],
+            "customer_name": row["customer_name"],
+            "payment_method": row["payment_method"],
+            "product_amount": product_part,
+            "service_amount": service_part,
+            "amount": D(row["amount"]),
+        })
+
+    collected_detail.sort(
+        key=lambda x: (x["collection_date"], x["number"] or ""),
+        reverse=True,
+    )
+
+    product_collected = direct_product_collected + credit_product_collected
+    service_collected = direct_service_collected + credit_service_collected
+    collected_total = product_collected + service_collected
+    direct_collected = direct_product_collected + direct_service_collected
+    credit_payments = credit_product_collected + credit_service_collected
+
+    # ==========================================================
+    # CARTERA DEL PERIODO, SEPARADA ENTRE PRODUCTOS Y SERVICIOS
+    # ==========================================================
+    pending_product_period = Decimal("0")
+    pending_service_period = Decimal("0")
+    period_receivables = []
+
+    for row in period_receivable_rows:
+        original = D(row["original_amount"])
+        paid = D(row["paid_amount"])
+        balance = max(Decimal("0"), original - paid)
+        product_pending, service_pending = allocate_amount(
+            balance,
+            row["product_total"],
+            row["service_total"],
+        )
+        pending_product_period += product_pending
+        pending_service_period += service_pending
+
+        period_receivables.append({
+            "invoice_id": row["invoice_id"],
+            "number": row["number"],
+            "issued_at": row["issued_at"],
+            "customer_name": row["customer_name"],
+            "original_amount": original,
+            "paid_amount": paid,
+            "balance": balance,
+            "product_pending": product_pending,
+            "service_pending": service_pending,
+        })
+
+    pending_period = pending_product_period + pending_service_period
+
+    # ==========================================================
+    # CARTERA TOTAL, SEPARADA ENTRE PRODUCTOS Y SERVICIOS
+    # ==========================================================
+    total_product_receivables = Decimal("0")
+    total_service_receivables = Decimal("0")
+
+    for row in all_receivable_rows:
+        original = D(row["original_amount"])
+        paid = D(row["paid_amount"])
+        balance = max(Decimal("0"), original - paid)
+        product_pending, service_pending = allocate_amount(
+            balance,
+            row["product_total"],
+            row["service_total"],
+        )
+        total_product_receivables += product_pending
+        total_service_receivables += service_pending
+
+    total_receivables = total_product_receivables + total_service_receivables
+
+    # ==========================================================
+    # SERVICIOS / CAJA / SALIDAS
+    # ==========================================================
+    service_worker = D(service_summary["worker_total"])
+    service_business = D(service_summary["business_total"])
+    extra_income_total = D(extra_income_row["total"])
+    expenses_total = D(expenses_row["total"])
+    supplier_payments_total = D(supplier_payments_row["total"])
+
+    total_inflows = product_collected + service_collected + extra_income_total
+    total_outflows = service_worker + expenses_total + supplier_payments_total
+    net_cash_flow = total_inflows - total_outflows
+
+    # ==========================================================
+    # RESUMEN DIARIO: PRODUCTOS Y SERVICIOS SEPARADOS
+    # ==========================================================
+    daily_map = {}
+
+    def ensure_day(raw_date):
+        key = str(raw_date)[:10]
+        if key not in daily_map:
+            daily_map[key] = {
+                "activity_date": key,
+                "product_collected": Decimal("0"),
+                "service_collected": Decimal("0"),
+                "extra_income": Decimal("0"),
+                "worker_total": Decimal("0"),
+                "expenses": Decimal("0"),
+                "supplier_payments": Decimal("0"),
+                "net_cash_flow": Decimal("0"),
+            }
+        return daily_map[key]
+
+    for row in collected_detail:
+        day = ensure_day(row["collection_date"])
+        day["product_collected"] += D(row["product_amount"])
+        day["service_collected"] += D(row["service_amount"])
+
+    for row in extra_income_detail:
+        ensure_day(row["income_date"])["extra_income"] += D(row["amount"])
+
+    for row in worker_detail:
+        # El detalle por mecánico está agregado por persona, no por día.
+        # Para el resumen diario hacemos una consulta basada en remisiones abajo.
+        pass
+
+    # 70% por fecha de servicio/remisión.
+    with db_conn() as conn:
+        daily_workers = conn.execute(
+            """
+            SELECT DATE(i.issued_at) AS activity_date,
+                   COALESCE(SUM(isi.worker_amount), 0) AS worker_total
+            FROM invoice_service_items isi
+            JOIN invoices i ON i.id = isi.invoice_id
+            WHERE DATE(i.issued_at) >= ?
+              AND DATE(i.issued_at) <= ?
+            GROUP BY DATE(i.issued_at)
+            """,
+            (date_from, date_to),
+        ).fetchall()
+
+    for row in daily_workers:
+        ensure_day(row["activity_date"])["worker_total"] += D(row["worker_total"])
+
+    for row in expense_detail:
+        ensure_day(row["expense_date"])["expenses"] += D(row["amount"])
+
+    for row in supplier_payment_detail:
+        ensure_day(row["payment_date"])["supplier_payments"] += D(row["amount"])
+
+    daily = []
+    for key in sorted(daily_map.keys(), reverse=True):
+        row = daily_map[key]
+        row["collected"] = row["product_collected"] + row["service_collected"]
+        row["net_cash_flow"] = (
+            row["product_collected"]
+            + row["service_collected"]
+            + row["extra_income"]
+            - row["worker_total"]
+            - row["expenses"]
+            - row["supplier_payments"]
+        )
+        daily.append(row)
 
     return render_template(
         "finances.html",
         date_from=date_from,
         date_to=date_to,
+
+        # Ventas emitidas
         product_sales=product_sales,
-        service_total=service_total,
+        service_sales=service_sales,
+        tax_issued=tax_issued,
+        invoice_total_issued=invoice_total_issued,
+        invoice_count=invoice_count,
+
+        # Cobros separados
+        direct_product_collected=direct_product_collected,
+        direct_service_collected=direct_service_collected,
+        credit_product_collected=credit_product_collected,
+        credit_service_collected=credit_service_collected,
+        product_collected=product_collected,
+        service_collected=service_collected,
+        direct_collected=direct_collected,
+        credit_payments=credit_payments,
+        collected_total=collected_total,
+
+        # Cartera separada
+        pending_product_period=pending_product_period,
+        pending_service_period=pending_service_period,
+        pending_period=pending_period,
+        total_product_receivables=total_product_receivables,
+        total_service_receivables=total_service_receivables,
+        total_receivables=total_receivables,
+
+        # Servicios 70/30
         service_worker=service_worker,
         service_business=service_business,
-        business_income=business_income,
-        invoice_count=int(invoice_summary["invoice_count"] or 0),
-        product_units=Decimal(str(product_summary["product_units"] or 0)),
-        daily=daily_rows,
-        product_detail=product_detail,
-        today_iso=now.isoformat(),
+
+        # Caja
+        extra_income_total=extra_income_total,
+        expenses_total=expenses_total,
+        supplier_payments_total=supplier_payments_total,
+        total_inflows=total_inflows,
+        total_outflows=total_outflows,
+        net_cash_flow=net_cash_flow,
+
+        # Detalles
+        collected_detail=collected_detail,
+        period_receivables=period_receivables,
+        worker_detail=worker_detail,
+        extra_income_detail=extra_income_detail,
+        expense_detail=expense_detail,
+        supplier_payment_detail=supplier_payment_detail,
+        daily=daily,
+
+        # Accesos rápidos
+        today_iso=today.isoformat(),
         yesterday_iso=yesterday.isoformat(),
         week_start_iso=week_start.isoformat(),
+        previous_week_start_iso=previous_week_start.isoformat(),
+        previous_week_end_iso=previous_week_end.isoformat(),
         month_start_iso=month_start.isoformat(),
     )
 
@@ -4417,7 +4943,9 @@ def backup():
     table_names = [
         "users", "settings", "products", "customers", "salespeople", "services",
         "invoices", "invoice_items", "invoice_service_items", "movements",
-        "accounts_receivable", "accounts_receivable_payments"
+        "accounts_receivable", "accounts_receivable_payments",
+        "accounts_payable", "accounts_payable_payments",
+        "expenses", "extra_income"
     ]
     payload = {"created_at": datetime.now().isoformat(), "database": db.engine.dialect.name, "tables": {}}
     with db_conn() as conn:
