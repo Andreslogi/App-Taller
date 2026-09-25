@@ -91,6 +91,25 @@
     </div>
 </div>
 
+<h3 style="margin:20px 0 12px;">70% por mecánico</h3>
+<div class="grid grid-3">
+    <div class="card stat">
+        <div class="label">Leo</div>
+        <div class="value">{{ leo_worker_total|money }}</div>
+        <div class="muted">70% de los servicios realizados por Leo en el periodo.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Daniel</div>
+        <div class="value">{{ daniel_worker_total|money }}</div>
+        <div class="muted">70% de los servicios realizados por Daniel en el periodo.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">James</div>
+        <div class="value">{{ james_worker_total|money }}</div>
+        <div class="muted">70% de los servicios realizados por James en el periodo.</div>
+    </div>
+</div>
+
 <h2 style="margin:8px 0 14px;">Caja semanal</h2>
 <div class="grid grid-4">
     <div class="card stat">
@@ -278,23 +297,33 @@
         <h3>Liquidación de mecánicos</h3>
         <table class="table">
             <thead>
-                <tr>
-                    <th>Mecánico</th>
-                    <th class="right">Servicios</th>
-                    <th class="right">70% a liquidar</th>
-                </tr>
+            <tr>
+                <th>Mecánico</th>
+                <th class="right">Servicios realizados</th>
+                <th class="right">70% mecánico</th>
+                <th class="right">30% negocio</th>
+            </tr>
             </thead>
             <tbody>
             {% for row in worker_detail %}
-                <tr>
-                    <td>{{ row.worker_name }}</td>
-                    <td class="right">{{ row.service_total|money }}</td>
-                    <td class="right"><strong>{{ row.worker_total|money }}</strong></td>
-                </tr>
+            <tr>
+                <td><strong>{{ row.worker_name }}</strong></td>
+                <td class="right">{{ row.service_total|money }}</td>
+                <td class="right"><strong>{{ row.worker_total|money }}</strong></td>
+                <td class="right">{{ row.business_total|money }}</td>
+            </tr>
             {% else %}
-                <tr><td colspan="3" class="muted">No hay servicios para liquidar.</td></tr>
+                <tr><td colspan="4" class="muted">No hay servicios para liquidar.</td></tr>
             {% endfor %}
             </tbody>
+            <tfoot>
+            <tr>
+                <th>Total</th>
+                <th class="right">{{ service_sales|money }}</th>
+                <th class="right">{{ service_worker|money }}</th>
+                <th class="right">{{ service_business|money }}</th>
+            </tr>
+            </tfoot>
         </table>
     </div>
 

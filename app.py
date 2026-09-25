@@ -31,6 +31,9 @@ load_dotenv()
 
 APP_NAME = "Control de Inventario y Remisiones"
 
+# Mecánicos autorizados para asignar servicios en las remisiones.
+ALLOWED_MECHANICS = ("Leo", "Daniel", "James")
+
 
 def resource_path(relative: str) -> Path:
     """Ruta compatible con ejecución normal y PyInstaller."""
@@ -1444,6 +1447,11 @@ def invoice_new():
                     price = parse_decimal(price_raw)
                     if not worker_name:
                         raise ValueError("Indica el trabajador responsable de cada servicio.")
+                    if worker_name not in ALLOWED_MECHANICS:
+                        raise ValueError(
+                            f"Mecánico no válido: {worker_name}. "
+                            f"Selecciona uno de: {', '.join(ALLOWED_MECHANICS)}."
+                        )
                     if qty <= 0 or price < 0:
                         raise ValueError("Revisa cantidades y valores de los servicios.")
                     service = conn.execute("SELECT * FROM services WHERE id=? AND active=1", (service_id,)).fetchone()
@@ -1860,6 +1868,7 @@ def finances():
                 isi.worker_name,
                 COALESCE(SUM(isi.line_total), 0) AS service_total,
                 COALESCE(SUM(isi.worker_amount), 0) AS worker_total,
+                COALESCE(SUM(isi.business_amount), 0) AS business_total,
                 COUNT(*) AS service_lines
             FROM invoice_service_items isi
             JOIN invoices i ON i.id = isi.invoice_id
@@ -1867,7 +1876,14 @@ def finances():
               AND DATE(i.issued_at) <= ?
               AND TRIM(COALESCE(isi.worker_name, '')) <> ''
             GROUP BY isi.worker_name
-            ORDER BY worker_total DESC, isi.worker_name ASC
+            ORDER BY
+                CASE isi.worker_name
+                    WHEN 'Leo' THEN 1
+                    WHEN 'Daniel' THEN 2
+                    WHEN 'James' THEN 3
+                    ELSE 4
+                END,
+                isi.worker_name ASC
             """,
             (date_from, date_to),
         ).fetchall()
@@ -2036,6 +2052,40 @@ def finances():
     expenses_total = D(expenses_row["total"])
     supplier_payments_total = D(supplier_payments_row["total"])
 
+    # Liquidación individual del 70% por mecánico.
+    # Se construye con los valores ya guardados en invoice_service_items,
+    # por lo que respeta exactamente el porcentaje del servicio.
+    mechanic_totals = {
+        name: {
+            "service_total": Decimal("0"),
+            "worker_total": Decimal("0"),
+            "business_total": Decimal("0"),
+            "service_lines": 0,
+        }
+        for name in ALLOWED_MECHANICS
+    }
+
+    for row in worker_detail:
+        worker_name = str(row["worker_name"] or "").strip()
+        if worker_name not in mechanic_totals:
+            mechanic_totals[worker_name] = {
+                "service_total": Decimal("0"),
+                "worker_total": Decimal("0"),
+                "business_total": Decimal("0"),
+                "service_lines": 0,
+            }
+
+        mechanic_totals[worker_name] = {
+            "service_total": D(row["service_total"]),
+            "worker_total": D(row["worker_total"]),
+            "business_total": D(row["business_total"]),
+            "service_lines": int(row["service_lines"] or 0),
+        }
+
+    leo_worker_total = mechanic_totals["Leo"]["worker_total"]
+    daniel_worker_total = mechanic_totals["Daniel"]["worker_total"]
+    james_worker_total = mechanic_totals["James"]["worker_total"]
+
     total_inflows = product_collected + service_collected + extra_income_total
     total_outflows = service_worker + expenses_total + supplier_payments_total
     net_cash_flow = total_inflows - total_outflows
@@ -2145,6 +2195,12 @@ def finances():
         # Servicios 70/30
         service_worker=service_worker,
         service_business=service_business,
+
+        # Liquidación individual por mecánico
+        mechanic_totals=mechanic_totals,
+        leo_worker_total=leo_worker_total,
+        daniel_worker_total=daniel_worker_total,
+        james_worker_total=james_worker_total,
 
         # Caja
         extra_income_total=extra_income_total,
@@ -4335,6 +4391,11 @@ def invoice_edit(invoice_id: int):
                     if not worker_name:
                         raise ValueError(
                             "Indica el trabajador responsable de cada servicio."
+                        )
+                    if worker_name not in ALLOWED_MECHANICS:
+                        raise ValueError(
+                            f"Mecánico no válido: {worker_name}. "
+                            f"Selecciona uno de: {', '.join(ALLOWED_MECHANICS)}."
                         )
                     if qty <= Decimal("0") or price < Decimal("0"):
                         raise ValueError(
