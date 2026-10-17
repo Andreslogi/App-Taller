@@ -457,6 +457,32 @@
                                 Editar
                             </a>
 
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'service_delete',
+                                    service_id=s.id
+                                ) }}"
+                                style="
+                                    margin:0;
+                                    display:inline;
+                                "
+                                onsubmit="
+                                    return confirm(
+                                        '¿Seguro que deseas eliminar este servicio del catálogo? Las remisiones y liquidaciones ya registradas no cambian.'
+                                    );
+                                "
+                            >
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-sm btn-danger"
+                                >
+                                    Eliminar
+                                </button>
+
+                            </form>
+
                         </td>
 
                     {% endif %}
@@ -480,6 +506,73 @@
     </table>
 
 </div>
+
+
+
+{% if g.user.role == 'administrador' and archived_services %}
+
+<div class="card table-wrap">
+
+    <details>
+
+        <summary>
+            Servicios eliminados ({{ archived_services|length }})
+        </summary>
+
+        <table class="table">
+
+            <tbody>
+
+                {% for s in archived_services %}
+
+                    <tr>
+
+                        <td>
+                            {{ s.name }}
+                        </td>
+
+                        <td>
+                            {{ s.default_price|money }}
+                        </td>
+
+                        <td>
+
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'service_restore',
+                                    service_id=s.id
+                                ) }}"
+                                style="
+                                    margin:0;
+                                    display:inline;
+                                "
+                            >
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-sm btn-light"
+                                >
+                                    Restaurar
+                                </button>
+
+                            </form>
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </details>
+
+</div>
+
+{% endif %}
 
 
 
