@@ -870,6 +870,28 @@ def services():
 
             with db_conn() as conn:
 
+                archived = conn.execute(
+                    "SELECT id FROM services WHERE LOWER(name)=LOWER(?) AND active=0",
+                    (name,)
+                ).fetchone()
+
+                if archived:
+
+                    conn.execute(
+                        """UPDATE services SET active=1,default_price=?,updated_at=CURRENT_TIMESTAMP
+                           WHERE id=?""",
+                        (price, archived["id"])
+                    )
+
+                    flash(
+                        "Ese servicio estaba eliminado y se restauró con el nuevo valor.",
+                        "success"
+                    )
+
+                    return redirect(
+                        url_for("services")
+                    )
+
                 conn.execute(
                     """
                     INSERT INTO services(
@@ -992,6 +1014,15 @@ def services():
             SELECT *
             FROM services
             WHERE active=1
+            ORDER BY name
+            """
+        ).fetchall()
+
+        archived_services = conn.execute(
+            """
+            SELECT *
+            FROM services
+            WHERE active=0
             ORDER BY name
             """
         ).fetchall()
@@ -1200,6 +1231,8 @@ def services():
 
         services=catalog,
 
+        archived_services=archived_services,
+
         history=history,
 
         summary=summary,
@@ -1248,6 +1281,47 @@ def service_edit(service_id: int):
         except ValueError as exc:
             flash(str(exc), "danger")
     return render_template("service_form.html", service=service)
+
+
+@app.route("/servicios/<int:service_id>/eliminar", methods=["POST"])
+@role_required("administrador")
+def service_delete(service_id: int):
+    # El servicio se archiva (active=0) en lugar de borrarse:
+    # - las remisiones y liquidaciones guardan su propia copia de nombre,
+    #   valores y porcentajes, así que el historial no cambia;
+    # - al editar una remisión antigua se vuelve a leer el servicio por id;
+    # - los servicios del Excel inicial se recrearían al reiniciar si se borraran.
+    with db_conn() as conn:
+        service = conn.execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()
+        if not service:
+            flash("Servicio no encontrado.", "danger")
+            return redirect(url_for("services"))
+        usage = conn.execute(
+            "SELECT COUNT(*) AS total FROM invoice_service_items WHERE service_id=?",
+            (service_id,),
+        ).fetchone()
+        conn.execute(
+            "UPDATE services SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (service_id,),
+        )
+    used = int(usage["total"] or 0)
+    message = f"Servicio \"{service['name']}\" eliminado del catálogo."
+    if used:
+        message += f" Aparece en {used} línea(s) de remisiones, que se conservan sin cambios."
+    flash(message, "success")
+    return redirect(url_for("services"))
+
+
+@app.route("/servicios/<int:service_id>/restaurar", methods=["POST"])
+@role_required("administrador")
+def service_restore(service_id: int):
+    with db_conn() as conn:
+        conn.execute(
+            "UPDATE services SET active=1,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (service_id,),
+        )
+    flash("Servicio restaurado.", "success")
+    return redirect(url_for("services"))
 
 
 @app.route("/facturas")
