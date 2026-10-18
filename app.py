@@ -33,6 +33,8 @@ APP_NAME = "Control de Inventario y Remisiones"
 
 # Mecánicos autorizados para asignar servicios en las remisiones.
 ALLOWED_MECHANICS = ("Leo", "Daniel", "James")
+# Mecánicos que aún trabajan en el taller (Leo ya no; se conserva en el histórico).
+ACTIVE_MECHANICS = ("Daniel", "James")
 
 
 def resource_path(relative: str) -> Path:
@@ -1536,10 +1538,10 @@ def invoice_new():
                     price = parse_decimal(price_raw)
                     if not worker_name:
                         raise ValueError("Indica el trabajador responsable de cada servicio.")
-                    if worker_name not in ALLOWED_MECHANICS:
+                    if worker_name not in ACTIVE_MECHANICS:
                         raise ValueError(
                             f"Mecánico no válido: {worker_name}. "
-                            f"Selecciona uno de: {', '.join(ALLOWED_MECHANICS)}."
+                            f"Selecciona uno de: {', '.join(ACTIVE_MECHANICS)}."
                         )
                     if qty <= 0 or price < 0:
                         raise ValueError("Revisa cantidades y valores de los servicios.")
