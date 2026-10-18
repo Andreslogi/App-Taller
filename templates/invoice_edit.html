@@ -1358,7 +1358,7 @@ function addServiceRow(
                 required
             >
                 <option value="">Seleccionar mecánico</option>
-                <option value="Leo" ${worker === 'Leo' ? 'selected' : ''}>Leo</option>
+                ${worker === 'Leo' ? '<option value="Leo" selected>Leo</option>' : ''}
                 <option value="Daniel" ${worker === 'Daniel' ? 'selected' : ''}>Daniel</option>
                 <option value="James" ${worker === 'James' ? 'selected' : ''}>James</option>
             </select>
