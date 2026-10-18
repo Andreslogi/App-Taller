@@ -337,6 +337,17 @@
 
                 </tbody>
 
+                <tfoot>
+                    <tr>
+                        <td colspan="4" style="text-align:right;">
+                            <strong>Subtotal productos</strong>
+                        </td>
+                        <td>
+                            <strong>{{ summary.product_subtotal|money }}</strong>
+                        </td>
+                    </tr>
+                </tfoot>
+
             </table>
 
         </div>
@@ -422,6 +433,17 @@
                 {% endfor %}
 
                 </tbody>
+
+                <tfoot>
+                    <tr>
+                        <td colspan="4" style="text-align:right;">
+                            <strong>Subtotal servicios</strong>
+                        </td>
+                        <td>
+                            <strong>{{ summary.service_subtotal|money }}</strong>
+                        </td>
+                    </tr>
+                </tfoot>
 
             </table>
 
@@ -529,6 +551,101 @@
 
 
     <!-- =====================================
+         ESTADO DE PAGO (CRÉDITO)
+    ====================================== -->
+
+    {% if summary.is_credit %}
+
+        <div
+            style="
+                display:flex;
+                justify-content:flex-end;
+                margin-top:10px;
+            "
+        >
+
+            <table
+                style="
+                    min-width:320px;
+                "
+            >
+
+                {% if summary.services_paid %}
+                <tr>
+                    <td style="padding:6px 8px;">Servicios pagados</td>
+                    <td style="padding:6px 8px; text-align:right;">- {{ summary.services_paid_amount|money }}</td>
+                </tr>
+                {% endif %}
+
+                {% if summary.other_paid > 0 %}
+                <tr>
+                    <td style="padding:6px 8px;">Abonos</td>
+                    <td style="padding:6px 8px; text-align:right;">- {{ summary.other_paid|money }}</td>
+                </tr>
+                {% endif %}
+
+                <tr>
+                    <td style="padding:8px; border-top:1px solid #1f4e78;">
+                        <strong>Saldo pendiente</strong>
+                    </td>
+                    <td style="padding:8px; text-align:right; border-top:1px solid #1f4e78;">
+                        <strong>{{ summary.balance|money }}</strong>
+                    </td>
+                </tr>
+
+            </table>
+
+        </div>
+
+        {% if can_mark_services_paid and summary.receivable and summary.service_subtotal > 0 %}
+
+            <form
+                class="actions no-print"
+                method="post"
+                action="{{ url_for('invoice_services_paid', invoice_id=invoice.id) }}"
+                style="
+                    justify-content:flex-end;
+                    align-items:center;
+                    gap:10px;
+                    margin-top:12px;
+                "
+                {% if summary.services_paid %}
+                onsubmit="if (confirm('¿Quitar la marca de servicios pagados? El saldo volverá a incluir los servicios.')) return true; this.querySelector('input[type=checkbox]').checked = true; return false;"
+                {% endif %}
+            >
+
+                {% if summary.services_paid %}
+
+                    <input type="hidden" name="services_paid" value="0">
+                    <label style="display:flex; align-items:center; gap:6px; margin:0;">
+                        <input type="checkbox" checked onchange="this.form.requestSubmit()">
+                        Servicios pagados ({{ summary.services_paid_amount|money }},
+                        {{ (summary.services_payment.payment_date|string)[:10] }})
+                    </label>
+
+                {% else %}
+
+                    <input type="hidden" name="services_paid" value="1">
+                    <select name="payment_method" style="width:auto;">
+                        <option>Efectivo</option>
+                        <option>Transferencia</option>
+                        <option>Tarjeta</option>
+                    </select>
+                    <label style="display:flex; align-items:center; gap:6px; margin:0;">
+                        <input type="checkbox" onchange="this.form.requestSubmit()">
+                        Marcar servicios pagados ({{ summary.service_subtotal|money }})
+                    </label>
+
+                {% endif %}
+
+            </form>
+
+        {% endif %}
+
+    {% endif %}
+
+
+    <!-- =====================================
          OBSERVACIONES
     ====================================== -->
 
@@ -566,6 +683,7 @@
 @media print {
 
     .actions,
+    .no-print,
     aside,
     nav {
         display: none !important;

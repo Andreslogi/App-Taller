@@ -184,6 +184,8 @@ class AccountReceivablePayment(db.Model):
     payment_date = db.Column(db.Date, nullable=False)
     payment_method = db.Column(db.String(80), nullable=False, default="Efectivo")
     notes = db.Column(db.Text, default="")
+    # ABONO = pago normal de cartera; SERVICIOS = pago de la mano de obra marcado desde la remisión.
+    payment_kind = db.Column(db.String(20), nullable=False, default="ABONO", server_default=text("'ABONO'"))
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
 

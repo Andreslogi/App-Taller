@@ -22,7 +22,7 @@
         <thead><tr><th>Fecha</th><th>Valor</th><th>Forma de pago</th><th>Observación</th><th>Registrado por</th></tr></thead>
         <tbody>
         {% for payment in payments %}
-            <tr><td>{{ payment.payment_date }}</td><td>{{ payment.amount|money }}</td><td>{{ payment.payment_method }}</td><td>{{ payment.notes or '-' }}</td><td>{{ payment.user_name or '-' }}</td></tr>
+            <tr><td>{{ payment.payment_date }}</td><td>{{ payment.amount|money }}</td><td>{{ payment.payment_method }}</td><td>{% if payment.payment_kind == 'SERVICIOS' %}<strong>Servicios pagados</strong> · {% endif %}{{ payment.notes or '-' }}</td><td>{{ payment.user_name or '-' }}</td></tr>
         {% else %}
             <tr><td colspan="5">Todavía no se han registrado pagos.</td></tr>
         {% endfor %}
