@@ -44,7 +44,12 @@
             <td>{{ account.customer_phone or '-' }}</td>
             <td>{{ account.vehicle_plate or '-' }}</td>
             <td>{{ account.original_amount|money }}</td>
-            <td>{{ account.paid_amount|money }}</td>
+            <td>
+                {{ account.paid_amount|money }}
+                {% if account.services_paid_amount and account.services_paid_amount > 0 %}
+                    <div class="muted" style="font-size:12px;">Incluye servicios pagados {{ account.services_paid_amount|money }}</div>
+                {% endif %}
+            </td>
             <td><strong>{{ account.balance|money }}</strong></td>
             <td>{{ account.due_date or 'Sin fecha' }}</td>
             <td><strong>{{ account.display_status }}</strong></td>

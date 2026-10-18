@@ -157,6 +157,7 @@ def init_db() -> None:
     """Crea el esquema y carga datos predeterminados de forma aditiva."""
     with app.app_context():
         db.create_all()
+        ensure_schema_updates()
         with db_conn() as conn:
             settings = conn.execute("SELECT * FROM settings WHERE id=1").fetchone()
             if not settings:
@@ -185,6 +186,20 @@ def init_db() -> None:
 
         seed_services_from_excel()
         seed_from_excel_if_empty()
+
+
+def ensure_schema_updates() -> None:
+    """Agrega columnas nuevas a tablas existentes (create_all no altera tablas ya creadas)."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(db.engine)
+    payment_columns = {c["name"] for c in inspector.get_columns("accounts_receivable_payments")}
+    if "payment_kind" not in payment_columns:
+        with db_conn() as conn:
+            conn.execute(
+                "ALTER TABLE accounts_receivable_payments "
+                "ADD COLUMN payment_kind VARCHAR(20) NOT NULL DEFAULT 'ABONO'"
+            )
 
 
 def seed_services_from_excel() -> None:
@@ -1771,6 +1786,13 @@ def finances():
                 p.payment_date,
                 p.amount,
                 p.payment_method,
+                p.payment_kind,
+                COALESCE((
+                    SELECT SUM(sp.amount)
+                    FROM accounts_receivable_payments sp
+                    WHERE sp.receivable_id = ar.id
+                      AND sp.payment_kind = 'SERVICIOS'
+                ), 0) AS services_paid_amount,
                 i.id AS invoice_id,
                 i.number,
                 i.customer_name,
@@ -1815,6 +1837,12 @@ def finances():
                     WHERE p.receivable_id = ar.id
                 ), 0) AS paid_amount,
                 COALESCE((
+                    SELECT SUM(sp.amount)
+                    FROM accounts_receivable_payments sp
+                    WHERE sp.receivable_id = ar.id
+                      AND sp.payment_kind = 'SERVICIOS'
+                ), 0) AS services_paid_amount,
+                COALESCE((
                     SELECT SUM(ii.line_total)
                     FROM invoice_items ii
                     WHERE ii.invoice_id = i.id
@@ -1847,6 +1875,12 @@ def finances():
                     FROM accounts_receivable_payments p
                     WHERE p.receivable_id = ar.id
                 ), 0) AS paid_amount,
+                COALESCE((
+                    SELECT SUM(sp.amount)
+                    FROM accounts_receivable_payments sp
+                    WHERE sp.receivable_id = ar.id
+                      AND sp.payment_kind = 'SERVICIOS'
+                ), 0) AS services_paid_amount,
                 COALESCE((
                     SELECT SUM(ii.line_total)
                     FROM invoice_items ii
@@ -2034,17 +2068,24 @@ def finances():
     credit_product_collected = Decimal("0")
     credit_service_collected = Decimal("0")
 
+    def credit_bases(row):
+        """Bases para repartir abonos/saldo: los servicios ya pagados aparte no cuentan."""
+        service_base = max(Decimal("0"), D(row["service_total"]) - D(row["services_paid_amount"]))
+        return row["product_total"], service_base
+
     for row in credit_payment_rows:
-        product_part, service_part = allocate_amount(
-            row["amount"],
-            row["product_total"],
-            row["service_total"],
-        )
+        if row["payment_kind"] == SERVICES_PAYMENT_KIND:
+            # Pago de mano de obra marcado desde la remisión: es 100% servicios.
+            product_part, service_part = Decimal("0"), D(row["amount"])
+        else:
+            product_part, service_part = allocate_amount(row["amount"], *credit_bases(row))
         credit_product_collected += product_part
         credit_service_collected += service_part
         collected_detail.append({
             "collection_date": str(row["payment_date"])[:10],
-            "source_type": "Cobro de cartera",
+            "source_type": (
+                "Pago de servicios" if row["payment_kind"] == SERVICES_PAYMENT_KIND else "Cobro de cartera"
+            ),
             "number": row["number"],
             "customer_name": row["customer_name"],
             "payment_method": row["payment_method"],
@@ -2075,11 +2116,7 @@ def finances():
         original = D(row["original_amount"])
         paid = D(row["paid_amount"])
         balance = max(Decimal("0"), original - paid)
-        product_pending, service_pending = allocate_amount(
-            balance,
-            row["product_total"],
-            row["service_total"],
-        )
+        product_pending, service_pending = allocate_amount(balance, *credit_bases(row))
         pending_product_period += product_pending
         pending_service_period += service_pending
 
@@ -2107,11 +2144,7 @@ def finances():
         original = D(row["original_amount"])
         paid = D(row["paid_amount"])
         balance = max(Decimal("0"), original - paid)
-        product_pending, service_pending = allocate_amount(
-            balance,
-            row["product_total"],
-            row["service_total"],
-        )
+        product_pending, service_pending = allocate_amount(balance, *credit_bases(row))
         total_product_receivables += product_pending
         total_service_receivables += service_pending
 
@@ -2353,7 +2386,13 @@ def accounts_receivable():
                     SELECT SUM(p.amount)
                     FROM accounts_receivable_payments p
                     WHERE p.receivable_id = ar.id
-                ), 0) AS paid_amount
+                ), 0) AS paid_amount,
+                COALESCE((
+                    SELECT SUM(sp.amount)
+                    FROM accounts_receivable_payments sp
+                    WHERE sp.receivable_id = ar.id
+                      AND sp.payment_kind = 'SERVICIOS'
+                ), 0) AS services_paid_amount
             FROM accounts_receivable ar
             JOIN invoices i ON i.id = ar.invoice_id
             ORDER BY i.issued_at ASC, ar.id ASC
@@ -3964,6 +4003,147 @@ def account_payable_history(account_id):
     )
 
 
+SERVICES_PAYMENT_KIND = "SERVICIOS"
+
+
+def _line_sum(rows) -> Decimal:
+    return sum((Decimal(str(r["line_total"] or 0)) for r in rows), Decimal("0"))
+
+
+def get_invoice_payment_summary(conn, invoice, items, service_items) -> dict[str, Any]:
+    """Subtotales por tipo y estado de pago (abonos, servicios pagados y saldo) de una remisión."""
+    product_subtotal = _line_sum(items)
+    service_subtotal = _line_sum(service_items)
+    total = Decimal(str(invoice["total"] or 0))
+    is_credit = invoice["payment_method"] == "Crédito"
+
+    receivable = None
+    services_payment = None
+    paid_total = Decimal("0")
+    if is_credit:
+        receivable = conn.execute(
+            "SELECT * FROM accounts_receivable WHERE invoice_id=?",
+            (invoice["id"],),
+        ).fetchone()
+    if receivable:
+        payments = conn.execute(
+            "SELECT * FROM accounts_receivable_payments WHERE receivable_id=? ORDER BY id",
+            (receivable["id"],),
+        ).fetchall()
+        paid_total = sum((Decimal(str(p["amount"] or 0)) for p in payments), Decimal("0"))
+        services_payment = next(
+            (p for p in payments if (p.get("payment_kind") or "") == SERVICES_PAYMENT_KIND),
+            None,
+        )
+        original = Decimal(str(receivable["original_amount"] or 0))
+    else:
+        original = total if is_credit else Decimal("0")
+
+    services_paid_amount = Decimal(str(services_payment["amount"])) if services_payment else Decimal("0")
+    return {
+        "product_subtotal": product_subtotal,
+        "service_subtotal": service_subtotal,
+        "is_credit": is_credit,
+        "receivable": receivable,
+        "services_payment": services_payment,
+        "services_paid": services_payment is not None,
+        "services_paid_amount": services_paid_amount,
+        "other_paid": paid_total - services_paid_amount,
+        "paid_total": paid_total,
+        "balance": max(Decimal("0"), original - paid_total) if is_credit else Decimal("0"),
+    }
+
+
+def _refresh_receivable_status(conn, receivable) -> None:
+    """Recalcula estado/cierre de una cuenta por cobrar según sus pagos actuales."""
+    paid_row = conn.execute(
+        "SELECT COALESCE(SUM(amount),0) AS paid FROM accounts_receivable_payments WHERE receivable_id=?",
+        (receivable["id"],),
+    ).fetchone()
+    paid = Decimal(str((paid_row or {}).get("paid") or 0))
+    original = Decimal(str(receivable["original_amount"] or 0))
+    if paid >= original and original > 0:
+        status, closed_at = "PAGADA", datetime.now().isoformat(timespec="seconds")
+    elif paid > 0:
+        status, closed_at = "PAGO PARCIAL", None
+    else:
+        status, closed_at = "PENDIENTE", None
+    conn.execute(
+        "UPDATE accounts_receivable SET status=?,closed_at=? WHERE id=?",
+        (status, closed_at, receivable["id"]),
+    )
+
+
+@app.route("/facturas/<int:invoice_id>/servicios-pagados", methods=["POST"])
+@role_required("administrador")
+def invoice_services_paid(invoice_id: int):
+    """Marca o desmarca que el cliente ya pagó los servicios (mano de obra) de una remisión a crédito.
+
+    Marcar registra un abono de tipo SERVICIOS por el subtotal de servicios, así el saldo,
+    cuentas por cobrar y finanzas lo reflejan sin lógica aparte. Desmarcar elimina ese abono.
+    """
+    mark = request.form.get("services_paid") == "1"
+    try:
+        with db_conn() as conn:
+            invoice = conn.execute("SELECT * FROM invoices WHERE id=?", (invoice_id,)).fetchone()
+            if not invoice:
+                raise ValueError("Remisión no encontrada.")
+            items = conn.execute("SELECT line_total FROM invoice_items WHERE invoice_id=?", (invoice_id,)).fetchall()
+            service_items = conn.execute(
+                "SELECT line_total FROM invoice_service_items WHERE invoice_id=?", (invoice_id,)
+            ).fetchall()
+            summary = get_invoice_payment_summary(conn, invoice, items, service_items)
+            receivable = summary["receivable"]
+
+            if not summary["is_credit"] or not receivable:
+                raise ValueError("Solo las remisiones a crédito tienen saldo pendiente para descontar servicios.")
+
+            if mark:
+                if summary["services_paid"]:
+                    raise ValueError("Los servicios de esta remisión ya están marcados como pagados.")
+                service_subtotal = summary["service_subtotal"]
+                if service_subtotal <= 0:
+                    raise ValueError("Esta remisión no tiene servicios.")
+                if service_subtotal > summary["balance"]:
+                    raise ValueError(
+                        f"El saldo pendiente ({money(summary['balance'])}) es menor que los servicios "
+                        f"({money(service_subtotal)}). Registra el pago como abono en cuentas por cobrar."
+                    )
+                payment_method = request.form.get("payment_method", "Efectivo").strip() or "Efectivo"
+                conn.execute(
+                    """INSERT INTO accounts_receivable_payments(
+                        receivable_id,amount,payment_date,payment_method,notes,payment_kind,user_id
+                    ) VALUES(?,?,?,?,?,?,?)""",
+                    (
+                        receivable["id"],
+                        float(service_subtotal),
+                        datetime.now().date(),
+                        payment_method,
+                        "Pago de servicios (mano de obra)",
+                        SERVICES_PAYMENT_KIND,
+                        g.user["id"],
+                    ),
+                )
+                message = f"Servicios marcados como pagados. Se descontaron {money(service_subtotal)} del saldo."
+            else:
+                if not summary["services_paid"]:
+                    raise ValueError("Los servicios de esta remisión no estaban marcados como pagados.")
+                conn.execute(
+                    "DELETE FROM accounts_receivable_payments WHERE id=?",
+                    (summary["services_payment"]["id"],),
+                )
+                message = "Se quitó la marca de servicios pagados. El saldo volvió a incluir los servicios."
+
+            _refresh_receivable_status(conn, receivable)
+
+        generate_invoice_pdf(invoice_id)
+        flash(message, "success")
+    except ValueError as exc:
+        flash(str(exc), "danger")
+
+    return redirect(url_for("invoice_view", invoice_id=invoice_id))
+
+
 @app.route("/facturas/<int:invoice_id>")
 @login_required
 def invoice_view(invoice_id: int):
@@ -4001,6 +4181,7 @@ def invoice_view(invoice_id: int):
         ).fetchall()
 
         settings = get_settings(conn)
+        summary = get_invoice_payment_summary(conn, invoice, items, service_items) if invoice else None
 
     if not invoice:
         flash("Remisión no encontrada.", "danger")
@@ -4019,7 +4200,9 @@ def invoice_view(invoice_id: int):
         items=items,
         service_items=service_items,
         settings=settings,
+        summary=summary,
         can_edit_invoice=can_edit_invoice,
+        can_mark_services_paid=current_role == "administrador",
     )
 
 
@@ -4591,6 +4774,22 @@ def invoice_edit(invoice_id: int):
                 ).fetchone()
                 paid_amount = Decimal("0")
                 if receivable:
+                    # Si los servicios estaban marcados como pagados, el pago sigue al nuevo subtotal de servicios.
+                    new_service_subtotal = sum((line[4] for line in service_lines), Decimal("0"))
+                    services_payment = conn.execute(
+                        "SELECT id FROM accounts_receivable_payments WHERE receivable_id=? AND payment_kind=?",
+                        (receivable["id"], SERVICES_PAYMENT_KIND),
+                    ).fetchone()
+                    if services_payment and new_service_subtotal <= 0:
+                        conn.execute(
+                            "DELETE FROM accounts_receivable_payments WHERE id=?",
+                            (services_payment["id"],),
+                        )
+                    elif services_payment:
+                        conn.execute(
+                            "UPDATE accounts_receivable_payments SET amount=? WHERE id=?",
+                            (float(new_service_subtotal), services_payment["id"]),
+                        )
                     paid_row = conn.execute(
                         """SELECT COALESCE(SUM(amount),0) AS paid
                            FROM accounts_receivable_payments
@@ -4803,6 +5002,7 @@ def generate_invoice_pdf(invoice_id: int) -> Path:
         ).fetchall()
 
         settings = get_settings(conn)
+        payment_summary = get_invoice_payment_summary(conn, invoice, items, service_items) if invoice else None
 
     if not invoice:
         raise ValueError("Remisión no encontrada")
@@ -4970,8 +5170,9 @@ def generate_invoice_pdf(invoice_id: int) -> Path:
     story.append(customer)
     story.append(Spacer(1, 2.5 * mm))
 
-    # Detalle de productos y servicios
+    # Detalle de productos y servicios, cada grupo con su subtotal
     data = [["Tipo", "Descripción", "Cant.", "Valor unitario", "Total"]]
+    subtotal_rows = []
 
     for item in items:
         data.append(
@@ -4983,6 +5184,9 @@ def generate_invoice_pdf(invoice_id: int) -> Path:
                 money(item["line_total"]),
             ]
         )
+    if items:
+        subtotal_rows.append(len(data))
+        data.append(["", "", "", "Subtotal productos", money(payment_summary["product_subtotal"])])
 
     for item in service_items:
         worker_name = str(item["worker_name"] or "").strip()
@@ -4998,7 +5202,11 @@ def generate_invoice_pdf(invoice_id: int) -> Path:
                 money(item["line_total"]),
             ]
         )
+    if service_items:
+        subtotal_rows.append(len(data))
+        data.append(["", "", "", "Subtotal servicios", money(payment_summary["service_subtotal"])])
 
+    detail_end = len(data) - 1
     data.extend(
         [
             ["", "", "", "Subtotal", money(invoice["subtotal"])],
@@ -5006,33 +5214,55 @@ def generate_invoice_pdf(invoice_id: int) -> Path:
             ["", "", "", "TOTAL", money(invoice["total"])],
         ]
     )
+    total_row = len(data) - 1
+
+    # Remisiones a crédito: lo ya pagado y el saldo que queda debiendo.
+    if payment_summary["is_credit"]:
+        if payment_summary["services_paid"]:
+            data.append(["", "", "", "Servicios pagados", f"- {money(payment_summary['services_paid_amount'])}"])
+        if payment_summary["other_paid"] > 0:
+            data.append(["", "", "", "Abonos", f"- {money(payment_summary['other_paid'])}"])
+        data.append(["", "", "", "SALDO PENDIENTE", money(payment_summary["balance"])])
+
+    table_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("FONTSIZE", (0, 0), (-1, -1), 6.7),
+        ("GRID", (0, 0), (-1, detail_end), 0.3, colors.HexColor("#999999")),
+        ("LINEABOVE", (3, detail_end + 1), (-1, -1), 0.4, colors.HexColor("#777777")),
+        ("FONTNAME", (3, total_row), (-1, total_row), "Helvetica-Bold"),
+        ("BACKGROUND", (3, total_row), (-1, total_row), colors.HexColor("#D9EAF7")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.8),
+    ]
+    for row in subtotal_rows:
+        table_style.extend(
+            [
+                ("SPAN", (0, row), (2, row)),
+                ("FONTNAME", (3, row), (-1, row), "Helvetica-Bold"),
+                ("BACKGROUND", (0, row), (-1, row), colors.HexColor("#EEF3F8")),
+            ]
+        )
+    if payment_summary["is_credit"]:
+        table_style.extend(
+            [
+                ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
+                ("BACKGROUND", (3, -1), (-1, -1), colors.HexColor("#FCE4D6")),
+            ]
+        )
 
     table = Table(
         data,
         colWidths=[22 * mm, 91 * mm, 14 * mm, 31 * mm, 33 * mm],
         repeatRows=1,
     )
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("FONTSIZE", (0, 0), (-1, -1), 6.7),
-                ("GRID", (0, 0), (-1, -4), 0.3, colors.HexColor("#999999")),
-                ("LINEABOVE", (3, -3), (-1, -1), 0.4, colors.HexColor("#777777")),
-                ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
-                ("BACKGROUND", (3, -1), (-1, -1), colors.HexColor("#D9EAF7")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
-                ("TOPPADDING", (0, 0), (-1, -1), 1.8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.8),
-            ]
-        )
-    )
+    table.setStyle(TableStyle(table_style))
     story.append(table)
     story.append(Spacer(1, 3 * mm))
     story.append(
