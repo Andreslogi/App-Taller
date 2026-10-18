@@ -4074,14 +4074,27 @@ def _refresh_receivable_status(conn, receivable) -> None:
     )
 
 
+def can_mark_services_paid(user) -> bool:
+    """Marcan servicios pagados quienes generan remisiones y cobran: arturo.lopez y el rol vendedor."""
+    if user is None:
+        return False
+    username = str(user["username"] or "").strip().lower()
+    role = str(user["role"] or "").strip().lower()
+    return (username == "arturo.lopez" and role == "administrador") or role == "vendedor"
+
+
 @app.route("/facturas/<int:invoice_id>/servicios-pagados", methods=["POST"])
-@role_required("administrador")
+@login_required
 def invoice_services_paid(invoice_id: int):
     """Marca o desmarca que el cliente ya pagó los servicios (mano de obra) de una remisión a crédito.
 
     Marcar registra un abono de tipo SERVICIOS por el subtotal de servicios, así el saldo,
     cuentas por cobrar y finanzas lo reflejan sin lógica aparte. Desmarcar elimina ese abono.
     """
+    if not can_mark_services_paid(g.user):
+        flash("Solo arturo.lopez o un vendedor pueden marcar los servicios como pagados.", "danger")
+        return redirect(url_for("invoice_view", invoice_id=invoice_id))
+
     mark = request.form.get("services_paid") == "1"
     try:
         with db_conn() as conn:
@@ -4202,7 +4215,7 @@ def invoice_view(invoice_id: int):
         settings=settings,
         summary=summary,
         can_edit_invoice=can_edit_invoice,
-        can_mark_services_paid=current_role == "administrador",
+        can_mark_services_paid=can_mark_services_paid(g.user),
     )
 
 
