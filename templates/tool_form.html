@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+
+{% if tool %}
+    {% set heading='Editar herramienta' %}
+{% else %}
+    {% set heading='Nueva herramienta' %}
+{% endif %}
+
+{% macro val(field, default='') -%}
+{%- if tool -%}{{ tool[field] if tool[field] is not none else default }}{%- else -%}{{ request.form.get(field, default) }}{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+
+<div class="card">
+    <form method="post">
+        <div class="form-grid">
+
+            <div class="form-group">
+                <label>Código *</label>
+                <input type="text" name="code" value="{{ val('code') }}" placeholder="Ej: HER-001" required>
+            </div>
+
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" name="name" value="{{ val('name') }}" placeholder="Ej: Pistola de impacto 1/2" required>
+            </div>
+
+            <div class="form-group">
+                <label>Categoría</label>
+                <input type="text" name="category" value="{{ val('category') }}" list="tool-categories">
+                <datalist id="tool-categories">
+                    <option value="Llaves">
+                    <option value="Copas y dados">
+                    <option value="Destornilladores">
+                    <option value="Herramienta eléctrica">
+                    <option value="Herramienta neumática">
+                    <option value="Medición y diagnóstico">
+                    <option value="Gatos y elevación">
+                    <option value="Otros">
+                </datalist>
+            </div>
+
+            <div class="form-group">
+                <label>Marca</label>
+                <input type="text" name="brand" value="{{ val('brand') }}">
+            </div>
+
+            <div class="form-group">
+                <label>Serial</label>
+                <input type="text" name="serial" value="{{ val('serial') }}">
+                <div class="muted">Útil para taladros, pistolas y equipos de valor.</div>
+            </div>
+
+            <div class="form-group">
+                <label>Cantidad</label>
+                {% if tool %}
+                    <input type="number" value="{{ tool.quantity|int }}" disabled>
+                    <div class="muted">
+                        Para cambiar la cantidad registra una entrada, pérdida o baja
+                        desde el detalle, o haz un conteo. Así queda el historial.
+                    </div>
+                {% else %}
+                    <input type="number" name="quantity" min="0" step="1" value="{{ request.form.get('quantity', '1') }}" required>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label>Costo unitario</label>
+                <input type="number" name="unit_cost" min="0" step="1" value="{% if tool %}{{ tool.unit_cost|int }}{% else %}{{ request.form.get('unit_cost', '0') }}{% endif %}">
+                <div class="muted">Sirve para calcular cuánto valen las pérdidas.</div>
+            </div>
+
+            <div class="form-group">
+                <label>Estado</label>
+                <select name="status">
+                    {% set current = tool.status if tool else request.form.get('status', 'Disponible') %}
+                    {% for s in statuses %}
+                        <option value="{{ s }}" {% if s == current %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Ubicación</label>
+                <input type="text" name="location" value="{{ val('location') }}" placeholder="Ej: Caja roja, estante 2">
+            </div>
+
+            <div class="form-group">
+                <label>Responsable</label>
+                <input type="text" name="responsible" value="{{ val('responsible') }}" placeholder="Quién la tiene a cargo">
+            </div>
+
+        </div>
+
+        <div class="form-group" style="margin-top:20px;">
+            <label>Observaciones</label>
+            <textarea name="notes" rows="3">{{ val('notes') }}</textarea>
+        </div>
+
+        <div class="actions" style="margin-top:20px;">
+            <button type="submit" class="btn btn-primary">
+                {% if tool %}Guardar cambios{% else %}Registrar herramienta{% endif %}
+            </button>
+            <a class="btn btn-light" href="{% if tool %}{{ url_for('tools.detail', tool_id=tool.id) }}{% else %}{{ url_for('tools.index') }}{% endif %}">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

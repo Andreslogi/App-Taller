@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% set heading='Inventario de herramientas' %}
+
+{% block content %}
+
+<style>
+.tool-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.tool-kpi {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-left: 6px solid #1f4e78;
+    border-radius: 12px;
+    padding: 18px;
+}
+.tool-kpi-loss { border-left-color: #d7190f; }
+.tool-kpi-title { color: #64748b; font-size: 13px; }
+.tool-kpi-value { margin-top: 6px; font-size: 24px; font-weight: 800; }
+@media (max-width: 900px) {
+    .tool-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+
+<p class="muted" style="margin-top:0">
+    Herramientas del taller (no se venden). Sirve para saber qué hay, dónde está y quién la tiene,
+    y para detectar pérdidas haciendo conteos físicos.
+</p>
+
+<div class="tool-kpis">
+    <div class="tool-kpi">
+        <div class="tool-kpi-title">Herramientas registradas</div>
+        <div class="tool-kpi-value">{{ summary.references_count }}</div>
+        <div class="muted">{{ summary.units|int }} unidades en total</div>
+    </div>
+    <div class="tool-kpi">
+        <div class="tool-kpi-title">Valor de la herramienta</div>
+        <div class="tool-kpi-value">{{ summary.total_value|money }}</div>
+    </div>
+    <div class="tool-kpi tool-kpi-loss">
+        <div class="tool-kpi-title">Pérdidas registradas</div>
+        <div class="tool-kpi-value">{{ losses.units|int }} und.</div>
+        <div class="muted">
+            {{ losses.value|money }} ·
+            <a href="{{ url_for('tools.losses') }}" style="text-decoration:underline">ver historial</a>
+        </div>
+    </div>
+    <div class="tool-kpi">
+        <div class="tool-kpi-title">Último conteo</div>
+        <div class="tool-kpi-value" style="font-size:18px">
+            {% if last_count %}{{ last_count|string|replace('T', ' ') }}{% else %}Nunca{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <form class="actions" method="get">
+        <input
+            style="max-width:380px"
+            name="q"
+            value="{{ q }}"
+            placeholder="Buscar por código, nombre, marca, ubicación o responsable"
+        >
+        <select name="status" style="max-width:190px">
+            <option value="">Todos los estados</option>
+            {% for s in statuses %}
+                <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        <a class="btn btn-light" href="{{ url_for('tools.index') }}">Limpiar</a>
+
+        {% if g.user["role"] == "administrador" %}
+            <a class="btn btn-success" href="{{ url_for('tools.new') }}">+ Herramienta</a>
+            <a class="btn btn-primary" href="{{ url_for('tools.count') }}">Hacer conteo</a>
+        {% endif %}
+        <a class="btn btn-light" href="{{ url_for('tools.export_csv') }}">Exportar CSV</a>
+    </form>
+</div>
+
+<div class="card table-wrap">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Herramienta</th>
+                <th>Categoría</th>
+                <th>Cantidad</th>
+                <th>Ubicación</th>
+                <th>Responsable</th>
+                <th>Estado</th>
+                <th>Valor</th>
+                <th>Último conteo</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for t in tools %}
+            <tr>
+                <td>{{ t.code }}</td>
+                <td>
+                    <a href="{{ url_for('tools.detail', tool_id=t.id) }}"><strong>{{ t.name }}</strong></a>
+                    {% if t.brand or t.serial %}
+                        <div class="muted">
+                            {{ t.brand }}{% if t.brand and t.serial %} · {% endif %}{% if t.serial %}S/N {{ t.serial }}{% endif %}
+                        </div>
+                    {% endif %}
+                </td>
+                <td>{{ t.category }}</td>
+                <td>
+                    {% if t.quantity|int <= 0 %}
+                        <span class="badge badge-out">0</span>
+                    {% else %}
+                        {{ t.quantity|int }}
+                    {% endif %}
+                </td>
+                <td>{{ t.location }}</td>
+                <td>{{ t.responsible }}</td>
+                <td>
+                    {% if t.status == 'Disponible' %}
+                        <span class="badge badge-ok">{{ t.status }}</span>
+                    {% else %}
+                        <span class="badge badge-low">{{ t.status }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ (t.quantity * t.unit_cost)|money }}</td>
+                <td class="muted">
+                    {% if t.last_counted_at %}{{ t.last_counted_at|string|replace('T', ' ') }}{% else %}-{% endif %}
+                </td>
+                <td>
+                    <div class="actions" style="flex-wrap:nowrap">
+                        <a class="btn btn-sm btn-light" href="{{ url_for('tools.detail', tool_id=t.id) }}">Ver</a>
+                        {% if g.user["role"] == "administrador" %}
+                            <a class="btn btn-sm btn-light" href="{{ url_for('tools.edit', tool_id=t.id) }}">Editar</a>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="10" class="muted">No hay herramientas registradas.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

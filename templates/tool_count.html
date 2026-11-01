@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% set heading='Conteo de herramientas' %}
+
+{% block content %}
+
+<div class="card">
+    <p style="margin-top:0">
+        Cuenta físicamente cada herramienta y escribe cuántas encontraste.
+        Si encuentras menos de las registradas, el sistema guarda la diferencia como
+        <strong>faltante</strong> y la verás en el historial de pérdidas.
+    </p>
+    <p class="muted" style="margin-bottom:0">
+        Deja vacía la casilla de las herramientas que no contaste: no se modifican.
+    </p>
+</div>
+
+<form method="post">
+    <div class="card table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Herramienta</th>
+                    <th>Ubicación</th>
+                    <th>Responsable</th>
+                    <th>Registradas</th>
+                    <th style="width:140px">Contadas</th>
+                    <th>Diferencia</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in tools %}
+                <tr>
+                    <td>{{ t.code }}</td>
+                    <td>{{ t.name }}</td>
+                    <td>{{ t.location }}</td>
+                    <td>{{ t.responsible }}</td>
+                    <td class="expected">{{ t.quantity|int }}</td>
+                    <td>
+                        <input type="number" min="0" step="1" name="counted_{{ t.id }}"
+                               class="counted" data-expected="{{ t.quantity|int }}">
+                    </td>
+                    <td class="diff muted">-</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="7" class="muted">No hay herramientas registradas.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <div class="form-group">
+            <label>Observaciones del conteo</label>
+            <input name="notes" placeholder="Ej: Conteo semanal hecho por Daniel">
+        </div>
+        <div class="actions" style="margin-top:12px">
+            <button class="btn btn-primary" type="submit"
+                    onclick="return confirm('¿Guardar el conteo? Las cantidades registradas se actualizarán a lo contado.');">
+                Guardar conteo
+            </button>
+            <a class="btn btn-light" href="{{ url_for('tools.index') }}">Cancelar</a>
+        </div>
+    </div>
+</form>
+
+<script>
+document.querySelectorAll('.counted').forEach(function (input) {
+    input.addEventListener('input', function () {
+        const cell = input.closest('tr').querySelector('.diff');
+        if (input.value === '') {
+            cell.textContent = '-';
+            cell.style.color = '';
+            cell.style.fontWeight = '';
+            return;
+        }
+        const diff = parseInt(input.value, 10) - parseInt(input.dataset.expected, 10);
+        if (diff < 0) {
+            cell.textContent = 'Faltan ' + (-diff);
+            cell.style.color = '#d7190f';
+        } else if (diff > 0) {
+            cell.textContent = 'Sobran ' + diff;
+            cell.style.color = '#7f6000';
+        } else {
+            cell.textContent = 'OK';
+            cell.style.color = '#274e13';
+        }
+        cell.style.fontWeight = '700';
+    });
+});
+</script>
+
+{% endblock %}

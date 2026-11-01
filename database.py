@@ -404,7 +404,8 @@ class CompatConnection:
             "users", "products", "customers", "salespeople", "invoices", "invoice_items",
             "services", "invoice_service_items", "movements",
             "accounts_receivable", "accounts_receivable_payments",
-            "accounts_payable", "accounts_payable_payments"
+            "accounts_payable", "accounts_payable_payments",
+            "tools", "tool_movements"
         } and " returning " not in lower and self.dialect == "postgresql":
             named_sql += " RETURNING id"
             result = self.connection.execute(text(named_sql), bind)
