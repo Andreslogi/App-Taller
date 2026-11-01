@@ -18,6 +18,7 @@ Esta versión conserva el funcionamiento del piloto local y agrega soporte para 
 - Servicios con reparto 70 % trabajador / 30 % negocio.
 - Servicios cargados desde `data/Servicios_Iniciales.xlsx` de forma aditiva.
 - PDF de remisiones.
+- Inventario de herramientas del taller (no se venden): registro, responsable, ubicación, pérdidas y conteos físicos para detectar faltantes.
 
 > Cambia las contraseñas iniciales y configura una `SECRET_KEY` segura antes de producción.
 

@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% set heading='Pérdidas de herramienta' %}
+
+{% block content %}
+
+<div class="card">
+    <div class="grid grid-2">
+        <div>
+            <div class="muted">Unidades perdidas</div>
+            <strong style="font-size:24px">{{ total_units }}</strong>
+        </div>
+        <div>
+            <div class="muted">Valor estimado</div>
+            <strong style="font-size:24px">{{ total_value|money }}</strong>
+        </div>
+    </div>
+    <div class="actions" style="margin-top:14px">
+        <a class="btn btn-light" href="{{ url_for('tools.index') }}">← Volver al inventario</a>
+    </div>
+</div>
+
+<div class="card table-wrap">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Código</th>
+                <th>Herramienta</th>
+                <th>Tipo</th>
+                <th>Cantidad</th>
+                <th>Valor</th>
+                <th>Responsable actual</th>
+                <th>Detalle</th>
+                <th>Registró</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+            <tr>
+                <td>{{ r.created_at|string|replace('T', ' ') }}</td>
+                <td>{{ r.code }}</td>
+                <td><a href="{{ url_for('tools.detail', tool_id=r.tool_id) }}">{{ r.name }}</a></td>
+                <td><span class="badge badge-out">{{ r.movement_type }}</span></td>
+                <td>{{ -r.quantity }}</td>
+                <td>{{ (-r.quantity * r.unit_cost)|money }}</td>
+                <td>{{ r.responsible or '' }}</td>
+                <td>{{ r.notes or '' }}</td>
+                <td>{{ r.user_name or '' }}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="9" class="muted">No hay pérdidas registradas.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

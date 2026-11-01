@@ -27,6 +27,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from expenses_module import expenses_bp
 from profitability_module import profitability_bp
 from extra_income_module import extra_income_bp
+from tools_module import tools_bp
 load_dotenv()
 
 APP_NAME = "Control de Inventario y Remisiones"
@@ -63,6 +64,7 @@ migrate = Migrate(app, db)
 app.register_blueprint(expenses_bp)
 app.register_blueprint(profitability_bp)
 app.register_blueprint(extra_income_bp)
+app.register_blueprint(tools_bp)
 
 def money(value: Any) -> str:
     try:
@@ -5325,7 +5327,7 @@ def backup():
         "invoices", "invoice_items", "invoice_service_items", "movements",
         "accounts_receivable", "accounts_receivable_payments",
         "accounts_payable", "accounts_payable_payments",
-        "expenses", "extra_income"
+        "expenses", "extra_income", "tools", "tool_movements"
     ]
     payload = {"created_at": datetime.now().isoformat(), "database": db.engine.dialect.name, "tables": {}}
     with db_conn() as conn:

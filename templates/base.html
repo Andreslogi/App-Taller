@@ -834,6 +834,24 @@
             </a>
 
 
+            <a
+                href="{{ url_for('tools.index') }}"
+                class="nav-link
+                {% if request.endpoint
+                    and
+                    request.endpoint.startswith('tools.')
+                %}
+                    active
+                {% endif %}"
+            >
+                <span class="nav-icon">
+                    🔧
+                </span>
+
+                Herramientas
+            </a>
+
+
             {% if g.user and g.user["role"] == "administrador" %}
 
                 <a

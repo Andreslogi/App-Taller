@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% set heading='Herramienta: ' ~ tool.name %}
+
+{% block content %}
+
+{% if not tool.active %}
+    <div class="alert alert-warning">Esta herramienta fue retirada del inventario. Se muestra solo su historial.</div>
+{% endif %}
+
+<div class="card">
+    <div class="grid grid-2">
+        <div>
+            <div class="muted">Código</div>
+            <strong>{{ tool.code }}</strong>
+            <div class="muted" style="margin-top:10px">Categoría</div>
+            {{ tool.category or '-' }}
+            <div class="muted" style="margin-top:10px">Marca / Serial</div>
+            {{ tool.brand or '-' }} / {{ tool.serial or '-' }}
+            <div class="muted" style="margin-top:10px">Estado</div>
+            {% if tool.status == 'Disponible' %}
+                <span class="badge badge-ok">{{ tool.status }}</span>
+            {% else %}
+                <span class="badge badge-low">{{ tool.status }}</span>
+            {% endif %}
+        </div>
+        <div>
+            <div class="muted">Cantidad actual</div>
+            <strong style="font-size:26px">{{ tool.quantity|int }}</strong>
+            <div class="muted" style="margin-top:10px">Ubicación</div>
+            {{ tool.location or '-' }}
+            <div class="muted" style="margin-top:10px">Responsable</div>
+            {{ tool.responsible or '-' }}
+            <div class="muted" style="margin-top:10px">Costo unitario / valor total</div>
+            {{ tool.unit_cost|money }} / {{ (tool.quantity * tool.unit_cost)|money }}
+        </div>
+    </div>
+    {% if tool.notes %}
+        <p class="muted" style="margin-top:14px">{{ tool.notes }}</p>
+    {% endif %}
+
+    <div class="actions" style="margin-top:16px">
+        <a class="btn btn-light" href="{{ url_for('tools.index') }}">← Volver</a>
+        {% if g.user["role"] == "administrador" and tool.active %}
+            <a class="btn btn-light" href="{{ url_for('tools.edit', tool_id=tool.id) }}">Editar</a>
+            <form method="post" action="{{ url_for('tools.delete', tool_id=tool.id) }}" style="margin:0"
+                  onsubmit="return confirm('¿Seguro que deseas eliminar esta herramienta del inventario?');">
+                <button type="submit" class="btn btn-danger">Eliminar</button>
+            </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if g.user["role"] == "administrador" and tool.active %}
+<form method="post" action="{{ url_for('tools.movement', tool_id=tool.id) }}" class="card">
+    <h3 style="margin-top:0">Registrar movimiento</h3>
+    <div class="form-grid">
+        <div class="form-group">
+            <label>Tipo</label>
+            <select name="movement_type">
+                {% for mt in movement_types %}
+                    <option>{{ mt }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Cantidad</label>
+            <input type="number" name="quantity" min="1" step="1" value="1" required>
+        </div>
+        <div class="form-group full" style="grid-column:1/-1">
+            <label>Detalle</label>
+            <input name="notes" placeholder="Compra, quién la tenía, dónde se vio por última vez...">
+        </div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px">Registrar</button>
+</form>
+{% endif %}
+
+<div class="card table-wrap">
+    <h3 style="margin-top:0">Historial</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Movimiento</th>
+                <th>Cambio</th>
+                <th>Antes → Después</th>
+                <th>Detalle</th>
+                <th>Usuario</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for m in movements %}
+            <tr>
+                <td>{{ m.created_at|string|replace('T', ' ') }}</td>
+                <td>
+                    {% if m.movement_type in loss_types %}
+                        <span class="badge badge-out">{{ m.movement_type }}</span>
+                    {% else %}
+                        {{ m.movement_type }}
+                    {% endif %}
+                </td>
+                <td>{% if m.quantity > 0 %}+{% endif %}{{ m.quantity }}</td>
+                <td>{{ m.previous_quantity }} → {{ m.new_quantity }}</td>
+                <td>{{ m.notes or '' }}</td>
+                <td>{{ m.user_name or '' }}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="6" class="muted">Sin movimientos.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
