@@ -169,6 +169,13 @@
                     required
                 >
 
+                    {# Gastos antiguos conservan una forma de pago que ya no se ofrece. #}
+                    {% if selected_method and selected_method not in payment_methods %}
+                        <option value="{{ selected_method }}" selected>
+                            {{ selected_method }}
+                        </option>
+                    {% endif %}
+
                     {% for item in payment_methods %}
 
                         <option

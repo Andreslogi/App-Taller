@@ -61,7 +61,7 @@
                     <form method="post" action="{{ url_for('accounts_receivable_payment', account_id=account.id) }}" style="margin-top:10px;">
                         <input type="number" name="amount" min="0.01" step="0.01" max="{{ account.balance }}" placeholder="Valor del abono" required>
                         <input type="date" name="payment_date">
-                        <select name="payment_method"><option>Efectivo</option><option>Transferencia</option><option>Tarjeta</option></select>
+                        <select name="payment_method"><option>Efectivo</option><option>Transferencia</option></select>
                         <input name="notes" placeholder="Observación (opcional)">
                         <button class="btn btn-sm btn-primary" type="submit">Guardar abono</button>
                     </form>
@@ -70,7 +70,7 @@
                     <summary class="btn btn-sm btn-success">Marcar como pagada</summary>
                     <form method="post" action="{{ url_for('accounts_receivable_pay_full', account_id=account.id) }}" style="margin-top:10px;" onsubmit="return confirm('¿Confirmas que el cliente pagó todo el saldo pendiente?');">
                         <input type="date" name="payment_date">
-                        <select name="payment_method"><option>Efectivo</option><option>Transferencia</option><option>Tarjeta</option></select>
+                        <select name="payment_method"><option>Efectivo</option><option>Transferencia</option></select>
                         <input name="notes" placeholder="Observación (opcional)">
                         <button class="btn btn-sm btn-success" type="submit">Confirmar pago total</button>
                     </form>

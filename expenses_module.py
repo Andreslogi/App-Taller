@@ -132,7 +132,6 @@ EXPENSE_TYPES = [
 PAYMENT_METHODS = [
     "Efectivo",
     "Transferencia",
-    "Tarjeta",
     "Débito automático",
     "Otro",
 ]
@@ -1215,10 +1214,14 @@ def edit_expense(
                 "Debes seleccionar un tipo de gasto válido."
             )
 
+        # Un gasto antiguo con una forma de pago que ya no se ofrece
+        # (por ejemplo "Tarjeta") puede guardarse sin cambiarla.
         if (
             payment_method
             and
             payment_method not in PAYMENT_METHODS
+            and
+            payment_method != expense["payment_method"]
         ):
 
             errors.append(
