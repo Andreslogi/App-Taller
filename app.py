@@ -5665,7 +5665,10 @@ def mechanic_receipt_pdf():
         receipt = get_mechanic_receipt(conn, mechanic, date_from, date_to)
         settings = get_settings(conn)
 
-    buffer = generate_mechanic_receipt_pdf(receipt, settings, g.user)
+    # El formulario envía detail=0 oculto y detail=1 si la casilla está marcada; sin el parámetro, con detalle.
+    detail_values = request.args.getlist("detail")
+    show_detail = not detail_values or "1" in detail_values
+    buffer = generate_mechanic_receipt_pdf(receipt, settings, g.user, show_detail=show_detail)
     download = request.args.get("download") == "1"
     return send_file(
         buffer,
@@ -5675,8 +5678,11 @@ def mechanic_receipt_pdf():
     )
 
 
-def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user) -> BytesIO:
-    """Comprobante de pago al mecánico en una hoja carta, con el mismo estilo de la remisión."""
+def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user, show_detail: bool = True) -> BytesIO:
+    """Comprobante de pago al mecánico en una hoja carta, con el mismo estilo de la remisión.
+
+    Con show_detail=False el PDF muestra solo el resumen del periodo, sin la lista de servicios.
+    """
     from xml.sax.saxutils import escape
 
     buffer = BytesIO()
@@ -5770,7 +5776,19 @@ def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user) -> By
 
     # Detalle de servicios
     data = [["Fecha", "Remisión", "Placa", "Servicio", "Cant.", "Valor servicio", "%", "Valor mecánico"]]
-    for line in receipt["lines"]:
+    detail_lines = receipt["lines"] if show_detail else []
+    if not show_detail and receipt["lines"]:
+        data.append([
+            Paragraph(f"{receipt['date_from']} a {receipt['date_to']}", tiny),
+            "",
+            "",
+            Paragraph(f"Resumen: {len(receipt['lines'])} servicio(s) en {remisiones} remisión(es)", tiny),
+            str(len(receipt["lines"])),
+            money(receipt["service_total"]),
+            "",
+            money(receipt["worker_total"]),
+        ])
+    for line in detail_lines:
         data.append([
             line["date"],
             line["invoice_number"],
@@ -5811,14 +5829,15 @@ def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user) -> By
         ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ]))
+    ] + ([("SPAN", (0, 1), (2, 1))] if not show_detail and receipt["lines"] else [])))
     story.append(table)
     story.append(Spacer(1, 6 * mm))
 
     story.append(Paragraph(
         f"Yo, <b>{esc(receipt['mechanic'])}</b>, declaro haber recibido la suma de "
         f"<b>{money(receipt['worker_total'])}</b> por concepto de los servicios realizados "
-        f"entre el {receipt['date_from']} y el {receipt['date_to']}, detallados en este comprobante.",
+        f"entre el {receipt['date_from']} y el {receipt['date_to']}, "
+        f"{'detallados' if show_detail else 'resumidos'} en este comprobante.",
         body,
     ))
     story.append(Spacer(1, 18 * mm))

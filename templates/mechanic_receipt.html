@@ -47,10 +47,20 @@
     <div class="card stat">
         <div class="label">Comprobante</div>
         <div class="value" style="font-size:1rem">{{ receipt.number }}</div>
-        <div class="actions" style="margin-top:10px">
-            <a class="btn btn-success" href="{{ url_for('mechanic_receipt_pdf', mechanic=receipt.mechanic, date_from=receipt.date_from, date_to=receipt.date_to, download=1) }}">Descargar PDF</a>
-            <a class="btn btn-light" target="_blank" href="{{ url_for('mechanic_receipt_pdf', mechanic=receipt.mechanic, date_from=receipt.date_from, date_to=receipt.date_to) }}">Ver PDF</a>
-        </div>
+        <form method="get" action="{{ url_for('mechanic_receipt_pdf') }}" style="margin-top:10px">
+            <input type="hidden" name="mechanic" value="{{ receipt.mechanic }}">
+            <input type="hidden" name="date_from" value="{{ receipt.date_from }}">
+            <input type="hidden" name="date_to" value="{{ receipt.date_to }}">
+            <input type="hidden" name="detail" value="0">
+            <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:10px">
+                <input type="checkbox" name="detail" value="1" checked style="width:auto">
+                Incluir la lista de servicios en el PDF
+            </label>
+            <div class="actions">
+                <button class="btn btn-success" type="submit" name="download" value="1">Descargar PDF</button>
+                <button class="btn btn-light" type="submit" formtarget="_blank">Ver PDF</button>
+            </div>
+        </form>
     </div>
 </div>
 
