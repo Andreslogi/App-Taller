@@ -6,7 +6,7 @@ import threading
 import time
 import webbrowser
 import csv
-from io import StringIO
+from io import BytesIO, StringIO
 from functools import wraps
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -5290,6 +5290,353 @@ def generate_invoice_pdf(invoice_id: int) -> Path:
     # Construir y retornar: ambas líneas son obligatorias.
     doc.build(story)
     return path
+
+
+# ==========================================================
+# COMPROBANTE DE PAGO DEL MECÁNICO
+# ==========================================================
+
+def _mechanic_receipt_params():
+    """Lee mecánico y rango de fechas de la URL. Por defecto: semana actual."""
+    today = datetime.now().date()
+    week_start = today.fromordinal(today.toordinal() - today.weekday())
+    mechanic = (request.args.get("mechanic") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip() or week_start.isoformat()
+    date_to = (request.args.get("date_to") or "").strip() or today.isoformat()
+
+    for value, label in ((date_from, "Desde"), (date_to, "Hasta")):
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(f"La fecha '{label}' no es válida.") from exc
+    if date_from > date_to:
+        raise ValueError("La fecha Desde no puede ser posterior a la fecha Hasta.")
+    return mechanic, date_from, date_to
+
+
+def _mechanic_names(conn) -> list[str]:
+    """Mecánicos autorizados más cualquier otro nombre que aparezca en remisiones antiguas."""
+    names = list(ACTIVE_MECHANICS)
+    for name in ALLOWED_MECHANICS:
+        if name not in names:
+            names.append(name)
+    rows = conn.execute(
+        """
+        SELECT DISTINCT TRIM(worker_name) AS worker_name
+        FROM invoice_service_items
+        WHERE TRIM(COALESCE(worker_name, '')) <> ''
+        ORDER BY 1
+        """
+    ).fetchall()
+    for row in rows:
+        if row["worker_name"] not in names:
+            names.append(row["worker_name"])
+    return names
+
+
+def get_mechanic_receipt(conn, mechanic: str, date_from: str, date_to: str) -> dict[str, Any]:
+    """Servicios realizados por un mecánico en el periodo y lo que se le debe pagar."""
+    rows = conn.execute(
+        """
+        SELECT
+            i.id AS invoice_id,
+            i.number AS invoice_number,
+            i.issued_at,
+            i.customer_name,
+            i.vehicle_plate,
+            isi.service_name,
+            isi.quantity,
+            isi.unit_price,
+            isi.line_total,
+            isi.worker_percentage,
+            isi.worker_amount
+        FROM invoice_service_items isi
+        JOIN invoices i ON i.id = isi.invoice_id
+        WHERE TRIM(COALESCE(isi.worker_name, '')) = ?
+          AND DATE(i.issued_at) >= ?
+          AND DATE(i.issued_at) <= ?
+        ORDER BY i.issued_at, i.id, isi.id
+        """,
+        (mechanic, date_from, date_to),
+    ).fetchall()
+
+    lines = []
+    service_total = Decimal("0")
+    worker_total = Decimal("0")
+    for row in rows:
+        line_total = Decimal(str(row["line_total"] or 0))
+        worker_amount = Decimal(str(row["worker_amount"] or 0))
+        service_total += line_total
+        worker_total += worker_amount
+        lines.append(
+            {
+                "invoice_id": row["invoice_id"],
+                "invoice_number": row["invoice_number"],
+                "date": str(row["issued_at"] or "")[:10],
+                "customer_name": row["customer_name"] or "-",
+                "vehicle_plate": row["vehicle_plate"] or "-",
+                "service_name": row["service_name"],
+                "quantity": Decimal(str(row["quantity"] or 0)),
+                "unit_price": Decimal(str(row["unit_price"] or 0)),
+                "line_total": line_total,
+                "worker_percentage": Decimal(str(row["worker_percentage"] or 0)),
+                "worker_amount": worker_amount,
+            }
+        )
+
+    number = "CPM-{}-{}-{}".format(
+        "".join(ch for ch in mechanic.upper() if ch.isalnum()) or "MEC",
+        date_from.replace("-", ""),
+        date_to.replace("-", ""),
+    )
+    return {
+        "number": number,
+        "mechanic": mechanic,
+        "date_from": date_from,
+        "date_to": date_to,
+        "lines": lines,
+        "service_total": service_total,
+        "worker_total": worker_total,
+        "business_total": service_total - worker_total,
+    }
+
+
+def _qty(value: Decimal) -> str:
+    return str(int(value)) if value == value.to_integral_value() else f"{value.normalize()}"
+
+
+app.jinja_env.filters["qty"] = _qty
+
+
+@app.route("/comprobante-mecanico")
+@login_required
+def mechanic_receipt():
+    try:
+        mechanic, date_from, date_to = _mechanic_receipt_params()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("mechanic_receipt"))
+
+    today = datetime.now().date()
+    week_start = today.fromordinal(today.toordinal() - today.weekday())
+    previous_week_start = week_start.fromordinal(week_start.toordinal() - 7)
+    previous_week_end = week_start.fromordinal(week_start.toordinal() - 1)
+
+    with db_conn() as conn:
+        mechanics = _mechanic_names(conn)
+        if not mechanic:
+            mechanic = mechanics[0] if mechanics else ""
+        receipt = get_mechanic_receipt(conn, mechanic, date_from, date_to) if mechanic else None
+
+    return render_template(
+        "mechanic_receipt.html",
+        mechanics=mechanics,
+        mechanic=mechanic,
+        date_from=date_from,
+        date_to=date_to,
+        receipt=receipt,
+        today_iso=today.isoformat(),
+        week_start_iso=week_start.isoformat(),
+        previous_week_start_iso=previous_week_start.isoformat(),
+        previous_week_end_iso=previous_week_end.isoformat(),
+        month_start_iso=today.replace(day=1).isoformat(),
+    )
+
+
+@app.route("/comprobante-mecanico/pdf")
+@login_required
+def mechanic_receipt_pdf():
+    try:
+        mechanic, date_from, date_to = _mechanic_receipt_params()
+        if not mechanic:
+            raise ValueError("Selecciona un mecánico.")
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("mechanic_receipt"))
+
+    with db_conn() as conn:
+        receipt = get_mechanic_receipt(conn, mechanic, date_from, date_to)
+        settings = get_settings(conn)
+
+    buffer = generate_mechanic_receipt_pdf(receipt, settings, g.user)
+    download = request.args.get("download") == "1"
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=download,
+        download_name=f"Comprobante_{receipt['number'].replace('-', '_')}.pdf",
+    )
+
+
+def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user) -> BytesIO:
+    """Comprobante de pago al mecánico en una hoja carta, con el mismo estilo de la remisión."""
+    from xml.sax.saxutils import escape
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=10 * mm,
+        leftMargin=10 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+        title=f"Comprobante de pago {receipt['number']}",
+    )
+    styles = getSampleStyleSheet()
+    small = ParagraphStyle("ReceiptSmall", parent=styles["Normal"], fontName="Helvetica", fontSize=8, leading=9.6)
+    tiny = ParagraphStyle("ReceiptTiny", parent=styles["Normal"], fontName="Helvetica", fontSize=7, leading=8.2)
+    body = ParagraphStyle("ReceiptBody", parent=styles["Normal"], fontName="Helvetica", fontSize=8.5, leading=11)
+    footer_style = ParagraphStyle(
+        "ReceiptFooter", parent=styles["Normal"], fontName="Helvetica", fontSize=6.8,
+        leading=8, alignment=1, textColor=colors.HexColor("#555555"),
+    )
+    blue = colors.HexColor("#1F4E78")
+    light_blue = colors.HexColor("#D9EAF7")
+    pale = colors.HexColor("#EEF3F8")
+    grid = colors.HexColor("#999999")
+    story = []
+
+    def esc(value) -> str:
+        return escape(str(value if value not in (None, "") else "-"))
+
+    # Encabezado
+    business_lines = [f"<b>{esc(settings['business_name'] or '')}</b>"]
+    for key in ("nit", "address"):
+        if settings[key]:
+            business_lines.append(esc(settings[key]))
+    contact = " - ".join(esc(settings[k]) for k in ("phone", "email") if settings[k])
+    if contact:
+        business_lines.append(contact)
+
+    header = Table(
+        [[
+            Paragraph("<br/>".join(business_lines), small),
+            Paragraph(
+                "<b>COMPROBANTE DE PAGO</b><br/>"
+                f"<font size='9.5'><b>{esc(receipt['number'])}</b></font>"
+                f"<br/>Fecha de emisión: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                small,
+            ),
+        ]],
+        colWidths=[118 * mm, 78 * mm],
+    )
+    header.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.7, blue),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BACKGROUND", (1, 0), (1, 0), light_blue),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(header)
+    story.append(Spacer(1, 3 * mm))
+
+    # Datos del pago
+    remisiones = len({line["invoice_id"] for line in receipt["lines"]})
+    info = Table(
+        [
+            ["Mecánico", Paragraph(esc(receipt["mechanic"]), tiny),
+             "Periodo", Paragraph(f"{receipt['date_from']} a {receipt['date_to']}", tiny)],
+            ["Servicios", Paragraph(str(len(receipt["lines"])), tiny),
+             "Remisiones", Paragraph(str(remisiones), tiny)],
+            ["Elaborado por", Paragraph(esc(user["full_name"] or user["username"]), tiny),
+             "Concepto", Paragraph("Pago por servicios realizados (participación del mecánico)", tiny)],
+        ],
+        colWidths=[26 * mm, 72 * mm, 24 * mm, 74 * mm],
+    )
+    info.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.3, grid),
+        ("BACKGROUND", (0, 0), (0, -1), pale),
+        ("BACKGROUND", (2, 0), (2, -1), pale),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.2),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+    ]))
+    story.append(info)
+    story.append(Spacer(1, 3 * mm))
+
+    # Detalle de servicios
+    data = [["Fecha", "Remisión", "Placa", "Servicio", "Cant.", "Valor servicio", "%", "Valor mecánico"]]
+    for line in receipt["lines"]:
+        data.append([
+            line["date"],
+            line["invoice_number"],
+            Paragraph(esc(line["vehicle_plate"]), tiny),
+            Paragraph(esc(line["service_name"]), tiny),
+            _qty(line["quantity"]),
+            money(line["line_total"]),
+            f"{_qty(line['worker_percentage'])}%",
+            money(line["worker_amount"]),
+        ])
+    if not receipt["lines"]:
+        data.append(["", "", "", Paragraph("No hay servicios registrados en este periodo.", tiny), "", "", "", ""])
+    detail_end = len(data) - 1
+    data.append(["", "", "", "", "", "Total servicios", "", money(receipt["service_total"])])
+    data.append(["", "", "", "", "", "TOTAL A PAGAR", "", money(receipt["worker_total"])])
+
+    table = Table(
+        data,
+        colWidths=[18 * mm, 22 * mm, 18 * mm, 58 * mm, 11 * mm, 26 * mm, 13 * mm, 30 * mm],
+        repeatRows=1,
+    )
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), blue),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (4, 1), (-1, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, detail_end), 0.3, grid),
+        ("SPAN", (5, -2), (6, -2)),
+        ("SPAN", (5, -1), (6, -1)),
+        ("LINEABOVE", (5, -2), (-1, -1), 0.4, colors.HexColor("#777777")),
+        ("FONTNAME", (5, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (5, -1), (-1, -1), 8),
+        ("BACKGROUND", (5, -1), (-1, -1), light_blue),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 6 * mm))
+
+    story.append(Paragraph(
+        f"Yo, <b>{esc(receipt['mechanic'])}</b>, declaro haber recibido la suma de "
+        f"<b>{money(receipt['worker_total'])}</b> por concepto de los servicios realizados "
+        f"entre el {receipt['date_from']} y el {receipt['date_to']}, detallados en este comprobante.",
+        body,
+    ))
+    story.append(Spacer(1, 18 * mm))
+
+    signatures = Table(
+        [
+            ["", "", ""],
+            [Paragraph(f"<b>Recibí:</b> {esc(receipt['mechanic'])}<br/>C.C.:", small), "",
+             Paragraph(f"<b>Entregó:</b> {esc(user['full_name'] or user['username'])}", small)],
+        ],
+        colWidths=[80 * mm, 36 * mm, 80 * mm],
+    )
+    signatures.setStyle(TableStyle([
+        ("LINEBELOW", (0, 0), (0, 0), 0.6, colors.black),
+        ("LINEBELOW", (2, 0), (2, 0), 0.6, colors.black),
+        ("TOPPADDING", (0, 1), (-1, 1), 3),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(signatures)
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph("Comprobante de pago a mecánico generado por el sistema del taller.", footer_style))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 
 @app.route("/configuracion", methods=["GET", "POST"])

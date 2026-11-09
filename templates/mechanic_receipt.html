@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% set heading='Comprobante de pago a mecánico' %}
+
+{% block content %}
+
+<div class="card">
+    <form method="get">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Mecánico</label>
+                <select name="mechanic">
+                    {% for name in mechanics %}
+                        <option value="{{ name }}" {% if name == mechanic %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Desde</label>
+                <input type="date" name="date_from" value="{{ date_from }}">
+            </div>
+            <div class="form-group">
+                <label>Hasta</label>
+                <input type="date" name="date_to" value="{{ date_to }}">
+            </div>
+        </div>
+        <div class="actions" style="margin-top:14px">
+            <button class="btn btn-primary" type="submit">Consultar</button>
+            <a class="btn btn-light" href="{{ url_for('mechanic_receipt', mechanic=mechanic, date_from=week_start_iso, date_to=today_iso) }}">Esta semana</a>
+            <a class="btn btn-light" href="{{ url_for('mechanic_receipt', mechanic=mechanic, date_from=previous_week_start_iso, date_to=previous_week_end_iso) }}">Semana anterior</a>
+            <a class="btn btn-light" href="{{ url_for('mechanic_receipt', mechanic=mechanic, date_from=month_start_iso, date_to=today_iso) }}">Este mes</a>
+        </div>
+    </form>
+</div>
+
+{% if receipt %}
+<div class="grid grid-2" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+    <div class="card stat">
+        <div class="label">Servicios realizados</div>
+        <div class="value">{{ receipt.service_total|money }}</div>
+        <div class="muted">{{ receipt.lines|length }} servicio(s) entre {{ receipt.date_from }} y {{ receipt.date_to }}.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Total a pagar a {{ receipt.mechanic }}</div>
+        <div class="value">{{ receipt.worker_total|money }}</div>
+        <div class="muted">Participación del mecánico según el porcentaje de cada servicio.</div>
+    </div>
+    <div class="card stat">
+        <div class="label">Comprobante</div>
+        <div class="value" style="font-size:1rem">{{ receipt.number }}</div>
+        <div class="actions" style="margin-top:10px">
+            <a class="btn btn-success" href="{{ url_for('mechanic_receipt_pdf', mechanic=receipt.mechanic, date_from=receipt.date_from, date_to=receipt.date_to, download=1) }}">Descargar PDF</a>
+            <a class="btn btn-light" target="_blank" href="{{ url_for('mechanic_receipt_pdf', mechanic=receipt.mechanic, date_from=receipt.date_from, date_to=receipt.date_to) }}">Ver PDF</a>
+        </div>
+    </div>
+</div>
+
+<div class="card table-wrap">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Remisión</th>
+                <th>Placa</th>
+                <th>Cliente</th>
+                <th>Servicio</th>
+                <th class="right">Cant.</th>
+                <th class="right">Valor servicio</th>
+                <th class="right">%</th>
+                <th class="right">Valor mecánico</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for line in receipt.lines %}
+            <tr>
+                <td>{{ line.date }}</td>
+                <td><a href="{{ url_for('invoice_view', invoice_id=line.invoice_id) }}">{{ line.invoice_number }}</a></td>
+                <td>{{ line.vehicle_plate }}</td>
+                <td>{{ line.customer_name }}</td>
+                <td>{{ line.service_name }}</td>
+                <td class="right">{{ line.quantity|qty }}</td>
+                <td class="right">{{ line.line_total|money }}</td>
+                <td class="right">{{ line.worker_percentage|qty }}%</td>
+                <td class="right"><strong>{{ line.worker_amount|money }}</strong></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="9" class="muted">{{ receipt.mechanic }} no tiene servicios registrados en este periodo.</td></tr>
+        {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="6">Total</th>
+                <th class="right">{{ receipt.service_total|money }}</th>
+                <th></th>
+                <th class="right">{{ receipt.worker_total|money }}</th>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% endif %}
+
+{% endblock %}
