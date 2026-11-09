@@ -30,6 +30,7 @@
     <strong>Criterio:</strong> productos y servicios se muestran por separado. Las remisiones de contado se reconocen como cobradas en la fecha de emisión; los pagos de crédito se reconocen en la fecha real del pago. Cuando una remisión mezcla productos y servicios, cada abono se distribuye proporcionalmente entre ambos.
 </div>
 
+{% if show_income_vs_expenses %}
 <style>
 .ivg-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:6px}
 .ivg-head h2{margin:0}
@@ -172,6 +173,8 @@
         {% endfor %}
     </div>
 </div>
+
+{% endif %}
 
 <h2 style="margin:8px 0 14px;">Productos</h2>
 <div class="grid grid-4">

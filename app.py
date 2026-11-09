@@ -1889,6 +1889,10 @@ def invoice_new():
         form_data=form_data
     )
 
+# Usuarios que pueden ver la comparación de ingresos vs gastos en Finanzas.
+INCOME_VS_EXPENSES_USERS = {"arturo.lopez"}
+
+
 @app.route("/finanzas")
 @role_required("administrador")
 def finances():
@@ -2480,6 +2484,11 @@ def finances():
     # ==========================================================
     # VISUAL: INGRESOS VS GASTOS
     # ==========================================================
+    # Solo el usuario autorizado ve esta comparación; para los demás
+    # no se calcula ni se envía a la plantilla.
+    show_income_vs_expenses = (
+        str(g.user["username"] or "").strip().lower() in INCOME_VS_EXPENSES_USERS
+    )
     def pct(part, whole):
         whole = D(whole)
         if whole <= 0:
@@ -2528,8 +2537,14 @@ def finances():
         t["inflow_height"] = pct(t["inflow"], trend_max)
         t["outflow_height"] = pct(t["outflow"], trend_max)
 
+    if not show_income_vs_expenses:
+        income_parts = expense_parts = expense_categories = trend = []
+        income_bar_width = expense_bar_width = 0
+        net_margin = None
+
     return render_template(
         "finances.html",
+        show_income_vs_expenses=show_income_vs_expenses,
         income_parts=income_parts,
         expense_parts=expense_parts,
         income_bar_width=income_bar_width,
