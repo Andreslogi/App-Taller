@@ -29,7 +29,7 @@
             Limpiar
         </a>
 
-        {% if g.user["role"] == "administrador" %}
+        {% if g.user["role"] in ("administrador", "vendedor") %}
 
             <a
                 class="btn btn-success"
@@ -37,6 +37,10 @@
             >
                 + Producto
             </a>
+
+        {% endif %}
+
+        {% if g.user["role"] == "administrador" %}
 
              <a
                 href="{{ url_for('export_products_csv') }}"
@@ -114,7 +118,7 @@
                 </th>
 
 
-                {% if g.user["role"] == "administrador" %}
+                {% if g.user["role"] in ("administrador", "vendedor") %}
 
                     <th>
                         Acciones
@@ -280,7 +284,7 @@
 
                 <!-- ACCIONES -->
 
-                {% if g.user["role"] == "administrador" %}
+                {% if g.user["role"] in ("administrador", "vendedor") %}
 
                     <td>
 
@@ -306,6 +310,7 @@
                             </a>
 
 
+                            {% if g.user["role"] == "administrador" %}
                             <form
                                 method="post"
                                 action="{{ url_for(
@@ -335,6 +340,7 @@
                                 </button>
 
                             </form>
+                            {% endif %}
 
 
                         </div>

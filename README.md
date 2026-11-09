@@ -5,8 +5,9 @@ Esta versión conserva el funcionamiento del piloto local y agrega soporte para 
 ## Qué conserva
 
 - Inventario inicial existente.
-- Productos nuevos desde la app (solo administradores).
-- Entradas y salidas de inventario (solo administradores).
+- Productos nuevos y edición de productos (precio, costo, descripción) para administradores y vendedores.
+- Entradas y salidas de inventario para administradores y vendedores.
+- Historial de inventario y precios (solo administradores): quién cambió qué, cuándo, con valor anterior y nuevo.
 - Remisiones con placa.
 - Usuarios y roles.
 - Usuarios iniciales:

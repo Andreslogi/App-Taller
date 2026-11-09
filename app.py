@@ -516,23 +516,102 @@ def products():
     return render_template("products.html", products=rows, q=q)
 
 
+PRODUCT_FIELD_LABELS = {
+    "code": "Código",
+    "description": "Descripción",
+    "category": "Categoría",
+    "unit": "Unidad",
+    "min_stock": "Stock mínimo",
+    "cost": "Costo de compra",
+    "sale_price": "Precio de venta",
+    "notes": "Observaciones",
+}
+PRODUCT_NUMERIC_FIELDS = {"min_stock", "cost", "sale_price"}
+
+
+def _audit_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (int, float, Decimal)):
+        number = Decimal(str(value))
+        return f"{number.normalize():f}" if number != number.to_integral() else str(int(number))
+    return str(value)
+
+
+def log_product_change(conn, product_id: int, action: str, field: str = "", old_value: Any = "", new_value: Any = "") -> None:
+    """Registra en la bitácora quién cambió qué en un producto, con valor anterior y nuevo."""
+    conn.execute(
+        """INSERT INTO product_changes(product_id,action,field,old_value,new_value,created_at,user_id)
+           VALUES(?,?,?,?,?,?,?)""",
+        (
+            product_id,
+            action,
+            field,
+            _audit_text(old_value),
+            _audit_text(new_value),
+            datetime.now().isoformat(timespec="seconds"),
+            g.user["id"] if g.user else None,
+        ),
+    )
+
+
+def _product_values_changed(old: Any, new: Any, numeric: bool) -> bool:
+    if numeric:
+        return Decimal(str(old or 0)) != Decimal(str(new or 0))
+    return str(old or "").strip() != str(new or "").strip()
+
+
 @app.route("/productos/nuevo", methods=["GET", "POST"])
-@role_required("administrador")
+@role_required("administrador", "vendedor")
 def product_new():
     if request.method == "POST":
         try:
-            values = (
-                request.form["code"].strip(), request.form["description"].strip(),
-                request.form.get("category", "").strip(), request.form.get("unit", "Unidad").strip(),
-                float(parse_decimal(request.form.get("stock"))), float(parse_decimal(request.form.get("min_stock"), Decimal("1"))),
-                float(parse_decimal(request.form.get("cost"))), float(parse_decimal(request.form.get("sale_price"))),
-                request.form.get("notes", "").strip(),
-            )
+            fields = {
+                "code": request.form["code"].strip(),
+                "description": request.form["description"].strip(),
+                "category": request.form.get("category", "").strip(),
+                "unit": request.form.get("unit", "Unidad").strip(),
+                "min_stock": float(parse_decimal(request.form.get("min_stock"), Decimal("1"))),
+                "cost": float(parse_decimal(request.form.get("cost"))),
+                "sale_price": float(parse_decimal(request.form.get("sale_price"))),
+                "notes": request.form.get("notes", "").strip(),
+            }
+            stock = parse_decimal(request.form.get("stock"))
+            if stock < Decimal("0"):
+                raise ValueError("El stock inicial no puede ser negativo.")
             with db_conn() as conn:
-                conn.execute(
+                cur = conn.execute(
                     """INSERT INTO products(code, description, category, unit, stock, min_stock, cost, sale_price, notes)
-                    VALUES(?,?,?,?,?,?,?,?,?)""", values
+                    VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (
+                        fields["code"], fields["description"], fields["category"], fields["unit"],
+                        0.0, fields["min_stock"], fields["cost"], fields["sale_price"], fields["notes"],
+                    ),
                 )
+                product_id = cur.lastrowid
+                if product_id is None:
+                    product_id = conn.execute(
+                        "SELECT id FROM products WHERE code=?", (fields["code"],)
+                    ).fetchone()["id"]
+                log_product_change(conn, product_id, "Creación", "", "", fields["description"])
+                for field in ("cost", "sale_price"):
+                    log_product_change(
+                        conn, product_id, "Creación", PRODUCT_FIELD_LABELS[field], "", fields[field]
+                    )
+                if stock > Decimal("0"):
+                    # El stock inicial entra como movimiento para que quede trazado.
+                    conn.execute(
+                        "UPDATE products SET stock=? WHERE id=?", (float(stock), product_id)
+                    )
+                    conn.execute(
+                        """INSERT INTO movements(
+                               product_id,movement_type,quantity,reference,notes,created_at,user_id
+                           ) VALUES(?,?,?,?,?,?,?)""",
+                        (
+                            product_id, "Entrada", float(stock), "Inventario inicial", "",
+                            datetime.now().isoformat(timespec="seconds"), g.user["id"],
+                        ),
+                    )
             flash("Producto creado correctamente.", "success")
             return redirect(url_for("products"))
         except IntegrityError:
@@ -543,7 +622,7 @@ def product_new():
 
 
 @app.route("/productos/<int:product_id>/editar", methods=["GET", "POST"])
-@role_required("administrador")
+@role_required("administrador", "vendedor")
 def product_edit(product_id: int):
     with db_conn() as conn:
         product = conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
@@ -553,18 +632,37 @@ def product_edit(product_id: int):
 
     if request.method == "POST":
         try:
-            values = (
-                request.form["code"].strip(), request.form["description"].strip(),
-                request.form.get("category", "").strip(), request.form.get("unit", "Unidad").strip(),
-                float(parse_decimal(request.form.get("min_stock"), Decimal("1"))),
-                float(parse_decimal(request.form.get("cost"))), float(parse_decimal(request.form.get("sale_price"))),
-                request.form.get("notes", "").strip(), product_id,
-            )
+            fields = {
+                "code": request.form["code"].strip(),
+                "description": request.form["description"].strip(),
+                "category": request.form.get("category", "").strip(),
+                "unit": request.form.get("unit", "Unidad").strip(),
+                "min_stock": float(parse_decimal(request.form.get("min_stock"), Decimal("1"))),
+                "cost": float(parse_decimal(request.form.get("cost"))),
+                "sale_price": float(parse_decimal(request.form.get("sale_price"))),
+                "notes": request.form.get("notes", "").strip(),
+            }
             with db_conn() as conn:
+                product_sql = "SELECT * FROM products WHERE id=?"
+                if db.engine.dialect.name == "postgresql":
+                    product_sql += " FOR UPDATE"
+                current = conn.execute(product_sql, (product_id,)).fetchone()
+                if not current:
+                    raise ValueError("Producto no encontrado.")
                 conn.execute(
                     """UPDATE products SET code=?, description=?, category=?, unit=?, min_stock=?, cost=?,
-                    sale_price=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""", values
+                    sale_price=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    (
+                        fields["code"], fields["description"], fields["category"], fields["unit"],
+                        fields["min_stock"], fields["cost"], fields["sale_price"], fields["notes"],
+                        product_id,
+                    ),
                 )
+                for field, label in PRODUCT_FIELD_LABELS.items():
+                    old = current[field]
+                    new = fields[field]
+                    if _product_values_changed(old, new, field in PRODUCT_NUMERIC_FIELDS):
+                        log_product_change(conn, product_id, "Edición", label, old, new)
             flash("Producto actualizado.", "success")
             return redirect(url_for("products"))
         except IntegrityError:
@@ -619,10 +717,22 @@ def product_delete(product_id: int):
             ).fetchone()
 
 
+            change_usage = conn.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM product_changes
+                WHERE product_id=?
+                """,
+                (product_id,)
+            ).fetchone()
+
+
             has_history = (
                 int(invoice_usage["total"] or 0) > 0
                 or
                 int(movement_usage["total"] or 0) > 0
+                or
+                int(change_usage["total"] or 0) > 0
             )
 
 
@@ -668,6 +778,10 @@ def product_delete(product_id: int):
                     (product_id,)
                 )
 
+                log_product_change(
+                    conn, product_id, "Retiro", "", product["description"], ""
+                )
+
                 flash(
                     f"Producto '{product['description']}' "
                     f"retirado del inventario. "
@@ -694,7 +808,7 @@ def product_delete(product_id: int):
 
 
 @app.route("/movimientos", methods=["GET", "POST"])
-@role_required("administrador")
+@role_required("administrador", "vendedor")
 def movements():
     if request.method == "POST":
         try:
@@ -777,6 +891,99 @@ def movements():
         movements=rows,
     )
 
+
+
+@app.route("/historial-inventario")
+@role_required("administrador")
+def inventory_history():
+    """Bitácora unificada de cambios de productos y movimientos de inventario."""
+    q = request.args.get("q", "").strip()
+    user_id = request.args.get("usuario", "").strip()
+    kind = request.args.get("tipo", "").strip()
+
+    filters = []
+    params: list[Any] = []
+    if q:
+        filters.append("(p.code LIKE ? OR p.description LIKE ?)")
+        params += [f"%{q}%", f"%{q}%"]
+    if user_id.isdigit():
+        filters.append("x.user_id=?")
+        params.append(int(user_id))
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+    with db_conn() as conn:
+        changes = []
+        if kind in ("", "cambios"):
+            changes = conn.execute(
+                f"""SELECT x.id, x.created_at, x.action, x.field, x.old_value, x.new_value,
+                           p.code, p.description, u.full_name AS user_name, u.username
+                    FROM product_changes x
+                    JOIN products p ON p.id=x.product_id
+                    LEFT JOIN users u ON u.id=x.user_id
+                    {where}
+                    ORDER BY x.created_at DESC, x.id DESC
+                    LIMIT 500""",
+                params,
+            ).fetchall()
+        stock_moves = []
+        if kind in ("", "movimientos"):
+            stock_moves = conn.execute(
+                f"""SELECT x.id, x.created_at, x.movement_type, x.quantity, x.reference, x.notes,
+                           p.code, p.description, u.full_name AS user_name, u.username
+                    FROM movements x
+                    JOIN products p ON p.id=x.product_id
+                    LEFT JOIN users u ON u.id=x.user_id
+                    {where}
+                    ORDER BY x.created_at DESC, x.id DESC
+                    LIMIT 500""",
+                params,
+            ).fetchall()
+        users_list = conn.execute(
+            "SELECT id, full_name, username FROM users ORDER BY full_name"
+        ).fetchall()
+
+    entries = []
+    for c in changes:
+        if c["action"] == "Edición":
+            detail = f"{c['field']}: {c['old_value'] or '(vacío)'} → {c['new_value'] or '(vacío)'}"
+        elif c["action"] == "Creación":
+            detail = f"{c['field']}: {c['new_value']}" if c["field"] else "Producto creado"
+        else:
+            detail = "Producto retirado del inventario"
+        entries.append({
+            "created_at": str(c["created_at"] or ""),
+            "kind": c["action"],
+            "code": c["code"],
+            "description": c["description"],
+            "detail": detail,
+            "field": c["field"],
+            "user_name": c["user_name"] or c["username"] or "—",
+        })
+    for m in stock_moves:
+        quantity = _audit_text(m["quantity"])
+        detail = f"{quantity} und."
+        extra = " · ".join(v for v in (m["reference"], m["notes"]) if v)
+        if extra:
+            detail += f" ({extra})"
+        entries.append({
+            "created_at": str(m["created_at"] or ""),
+            "kind": m["movement_type"],
+            "code": m["code"],
+            "description": m["description"],
+            "detail": detail,
+            "field": "Stock",
+            "user_name": m["user_name"] or m["username"] or "Sistema",
+        })
+    entries.sort(key=lambda e: e["created_at"].replace("T", " "), reverse=True)
+
+    return render_template(
+        "inventory_history.html",
+        entries=entries[:500],
+        users=users_list,
+        q=q,
+        selected_user=user_id,
+        kind=kind,
+    )
 
 
 @app.route("/vendedores")

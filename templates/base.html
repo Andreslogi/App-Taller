@@ -834,7 +834,7 @@
             </a>
 
 
-            {% if g.user and g.user["role"] == "administrador" %}
+            {% if g.user and g.user["role"] in ("administrador", "vendedor") %}
 
                 <a
                     href="{{ url_for('movements') }}"
@@ -848,6 +848,25 @@
                     </span>
 
                     Movimientos
+                </a>
+
+            {% endif %}
+
+
+            {% if g.user and g.user["role"] == "administrador" %}
+
+                <a
+                    href="{{ url_for('inventory_history') }}"
+                    class="nav-link
+                    {% if request.endpoint == 'inventory_history' %}
+                        active
+                    {% endif %}"
+                >
+                    <span class="nav-icon">
+                        ☰
+                    </span>
+
+                    Historial inventario
                 </a>
 
 
