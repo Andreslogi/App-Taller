@@ -6,21 +6,17 @@
 
 <div class="card">
 
-    <form class="actions" method="get">
+    <form class="actions" method="get" onsubmit="return false;">
 
         <input
             style="max-width:430px"
             name="q"
             value="{{ q }}"
             placeholder="Buscar por código, descripción o categoría"
+            autocomplete="off"
+            autofocus
+            data-table-filter="#productsTable"
         >
-
-        <button
-            class="btn btn-primary"
-            type="submit"
-        >
-            Buscar
-        </button>
 
         <a
             class="btn btn-light"
@@ -59,7 +55,9 @@
 
 <div class="card table-wrap">
 
-    <table class="table">
+    <div class="muted" style="font-size:13px;margin-bottom:8px" data-table-filter-count="#productsTable"></div>
+
+    <table class="table" id="productsTable">
 
         <thead>
 
@@ -135,7 +133,7 @@
 
         {% for p in products %}
 
-            <tr>
+            <tr data-search="{{ p.code }} {{ p.description }} {{ p.category or '' }} {{ p.notes or '' }}">
 
 
                 <!-- CÓDIGO -->

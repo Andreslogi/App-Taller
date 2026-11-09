@@ -176,11 +176,65 @@
         (root || document).querySelectorAll('select[data-searchable]').forEach(enhance);
     }
 
-    window.SearchableSelect = { init: init };
+    /*
+     * Filtro en vivo de tablas.
+     * Uso: <input data-table-filter="#idDeLaTabla">
+     * Al escribir oculta las filas del <tbody> que no contienen todas las
+     * palabras (sin importar mayúsculas ni tildes). Si existe un elemento con
+     * data-table-filter-count apuntando a la misma tabla, muestra el conteo.
+     */
+    function enhanceTableFilter(input) {
+        if (input.dataset.tableFilterReady) return;
+        input.dataset.tableFilterReady = '1';
+
+        var selector = input.dataset.tableFilter;
+        var table = document.querySelector(selector);
+        if (!table || !table.tBodies.length) return;
+        var tbody = table.tBodies[0];
+        var rows = Array.prototype.slice.call(tbody.rows).map(function (tr) {
+            return { tr: tr, key: normalize(tr.dataset.search || tr.textContent).replace(/\s+/g, ' ') };
+        });
+        var counter = document.querySelector('[data-table-filter-count="' + selector + '"]');
+        var colspan = rows.length ? rows[0].tr.cells.length : 1;
+
+        var emptyRow = document.createElement('tr');
+        emptyRow.innerHTML = '<td class="muted" colspan="' + colspan + '">Sin resultados para esta búsqueda.</td>';
+        emptyRow.style.display = 'none';
+        tbody.appendChild(emptyRow);
+
+        function apply() {
+            var terms = normalize(input.value).split(/\s+/).filter(Boolean);
+            var shown = 0;
+            rows.forEach(function (r) {
+                var match = terms.every(function (t) { return r.key.indexOf(t) !== -1; });
+                r.tr.style.display = match ? '' : 'none';
+                if (match) shown++;
+            });
+            emptyRow.style.display = shown || !rows.length ? 'none' : '';
+            if (counter) {
+                counter.textContent = terms.length
+                    ? shown + ' de ' + rows.length + ' productos'
+                    : rows.length + ' productos';
+            }
+        }
+
+        input.addEventListener('input', apply);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { input.value = ''; apply(); }
+        });
+        apply();
+    }
+
+    function initAll(root) {
+        init(root);
+        (root || document).querySelectorAll('input[data-table-filter]').forEach(enhanceTableFilter);
+    }
+
+    window.SearchableSelect = { init: initAll };
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { init(); });
+        document.addEventListener('DOMContentLoaded', function () { initAll(); });
     } else {
-        init();
+        initAll();
     }
 })();
