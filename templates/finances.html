@@ -30,6 +30,152 @@
     <strong>Criterio:</strong> productos y servicios se muestran por separado. Las remisiones de contado se reconocen como cobradas en la fecha de emisión; los pagos de crédito se reconocen en la fecha real del pago. Cuando una remisión mezcla productos y servicios, cada abono se distribuye proporcionalmente entre ambos.
 </div>
 
+{% if show_income_vs_expenses %}
+<style>
+.ivg-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+.ivg-head h2{margin:0}
+.ivg-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:14px 0 20px}
+.ivg-kpi{border:1px solid var(--border);border-radius:10px;padding:14px 16px;border-left-width:5px}
+.ivg-kpi .label{font-size:13px;color:var(--muted)}
+.ivg-kpi .value{font-size:26px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+.ivg-kpi.in{border-left-color:#2f75b5}.ivg-kpi.out{border-left-color:#c00000}
+.ivg-kpi.pos{border-left-color:#548235}.ivg-kpi.pos .value{color:#3d6a25}
+.ivg-kpi.neg{border-left-color:#c00000}.ivg-kpi.neg .value{color:#a00000}
+.ivg-row{display:grid;grid-template-columns:90px 1fr 150px;align-items:center;gap:12px;margin:10px 0}
+.ivg-row .name{font-weight:600}
+.ivg-row .total{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.ivg-track{background:#eef2f7;border-radius:6px;height:34px;overflow:hidden}
+.ivg-bar{display:flex;height:100%;gap:2px}
+.ivg-seg{height:100%;min-width:0}
+.ivg-seg:first-child{border-radius:6px 0 0 6px}.ivg-seg:last-child{border-radius:0 6px 6px 0}
+.ivg-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 24px;margin-top:16px;font-size:14px}
+.ivg-legend .item{display:flex;align-items:center;gap:8px}
+.ivg-legend .item span.amt{margin-left:auto;font-variant-numeric:tabular-nums}
+.ivg-sw{width:12px;height:12px;border-radius:3px;flex:none}
+.ivg-cols{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.ivg-trend{display:flex;align-items:flex-end;gap:10px;height:200px;overflow-x:auto;padding:8px 2px 0;border-bottom:1px solid var(--border)}
+.ivg-day{display:flex;flex-direction:column;align-items:center;flex:1 0 34px;height:100%}
+.ivg-pair{display:flex;align-items:flex-end;gap:2px;height:100%;width:100%;justify-content:center}
+.ivg-pair div{width:12px;border-radius:3px 3px 0 0;min-height:1px}
+.ivg-labels{display:flex;gap:10px;overflow-x:hidden;padding:0 2px}
+.ivg-labels span{flex:1 0 34px;text-align:center;font-size:11px;color:var(--muted)}
+.ivg-cat{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin:10px 0;font-size:14px}
+.ivg-cat .bar{grid-column:1/-1;height:8px;background:#eef2f7;border-radius:4px;overflow:hidden}
+.ivg-cat .bar div{height:100%;background:#c00000;border-radius:4px}
+@media(max-width:900px){.ivg-kpis,.ivg-cols,.ivg-legend{grid-template-columns:1fr}.ivg-row{grid-template-columns:70px 1fr}.ivg-row .total{grid-column:2;text-align:left}}
+</style>
+
+<div class="card">
+    <div class="ivg-head">
+        <div>
+            <h2>Ingresos vs gastos</h2>
+            <div class="muted">Del {{ date_from }} al {{ date_to }}. Usa los filtros de arriba para cambiar el periodo.</div>
+        </div>
+    </div>
+
+    <div class="ivg-kpis">
+        <div class="ivg-kpi in">
+            <div class="label">Total ingresos</div>
+            <div class="value">{{ total_inflows|money }}</div>
+            <div class="muted">Remisiones cobradas + ingresos extras.</div>
+        </div>
+        <div class="ivg-kpi out">
+            <div class="label">Total gastos</div>
+            <div class="value">{{ total_outflows|money }}</div>
+            <div class="muted">Gastos + 70% mecánicos + proveedores.</div>
+        </div>
+        <div class="ivg-kpi {{ 'pos' if net_cash_flow >= 0 else 'neg' }}">
+            <div class="label">{{ 'Ganancia' if net_cash_flow >= 0 else 'Pérdida' }} del periodo</div>
+            <div class="value">{{ net_cash_flow|money }}</div>
+            <div class="muted">
+                {% if net_margin is not none %}
+                    {{ '%.1f'|format(net_margin) }}% de los ingresos.
+                {% else %}
+                    Sin ingresos en el periodo.
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="ivg-row">
+        <div class="name">Ingresos</div>
+        <div class="ivg-track">
+            <div class="ivg-bar" style="width:{{ income_bar_width }}%">
+                {% for part in income_parts if part.amount > 0 %}
+                    <div class="ivg-seg" style="flex:{{ part.width }} 0 0;background:{{ part.color }}" title="{{ part.label }}: {{ part.amount|money }}"></div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="total">{{ total_inflows|money }}</div>
+    </div>
+    <div class="ivg-row">
+        <div class="name">Gastos</div>
+        <div class="ivg-track">
+            <div class="ivg-bar" style="width:{{ expense_bar_width }}%">
+                {% for part in expense_parts if part.amount > 0 %}
+                    <div class="ivg-seg" style="flex:{{ part.width }} 0 0;background:{{ part.color }}" title="{{ part.label }}: {{ part.amount|money }}"></div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="total">{{ total_outflows|money }}</div>
+    </div>
+
+    <div class="ivg-legend">
+        <div>
+            {% for part in income_parts %}
+                <div class="item"><i class="ivg-sw" style="background:{{ part.color }}"></i>{{ part.label }}<span class="amt">{{ part.amount|money }}</span></div>
+            {% endfor %}
+        </div>
+        <div>
+            {% for part in expense_parts %}
+                <div class="item"><i class="ivg-sw" style="background:{{ part.color }}"></i>{{ part.label }}<span class="amt">{{ part.amount|money }}</span></div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="ivg-cols">
+    <div class="card">
+        <h3 style="margin-top:0">Ingresos y gastos por día</h3>
+        {% if trend %}
+            <div class="ivg-legend" style="margin:0 0 10px;display:flex;gap:18px">
+                <div class="item"><i class="ivg-sw" style="background:#2f75b5"></i>Ingresos</div>
+                <div class="item"><i class="ivg-sw" style="background:#c00000"></i>Gastos</div>
+            </div>
+            <div class="ivg-trend">
+                {% for t in trend %}
+                    <div class="ivg-day" title="{{ t.date }} · Ingresos {{ t.inflow|money }} · Gastos {{ t.outflow|money }} · Neto {{ t.net|money }}">
+                        <div class="ivg-pair">
+                            <div style="height:{{ t.inflow_height }}%;background:#2f75b5"></div>
+                            <div style="height:{{ t.outflow_height }}%;background:#c00000"></div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="ivg-labels">
+                {% for t in trend %}<span>{{ t.label }}</span>{% endfor %}
+            </div>
+            <div class="muted" style="margin-top:8px;font-size:13px">Pasa el mouse sobre un día para ver los valores.</div>
+        {% else %}
+            <div class="muted">No hay movimientos en el periodo seleccionado.</div>
+        {% endif %}
+    </div>
+    <div class="card">
+        <h3 style="margin-top:0">Gastos por categoría</h3>
+        {% for c in expense_categories %}
+            <div class="ivg-cat">
+                <span>{{ c.category }}</span>
+                <strong>{{ c.amount|money }}</strong>
+                <div class="bar"><div style="width:{{ c.share }}%"></div></div>
+            </div>
+        {% else %}
+            <div class="muted">No hay gastos registrados en el periodo.</div>
+        {% endfor %}
+    </div>
+</div>
+
+{% endif %}
+
 <h2 style="margin:8px 0 14px;">Productos</h2>
 <div class="grid grid-4">
     <div class="card stat">
