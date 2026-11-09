@@ -5774,8 +5774,9 @@ def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user, show_
     story.append(info)
     story.append(Spacer(1, 3 * mm))
 
-    # Detalle de servicios
-    data = [["Fecha", "Remisión", "Placa", "Servicio", "Cant.", "Valor servicio", "%", "Valor mecánico"]]
+    # Detalle de servicios: solo se muestra lo que le corresponde al mecánico,
+    # nunca el valor total del servicio cobrado por el taller.
+    data = [["Fecha", "Remisión", "Placa", "Servicio", "Cant.", "Valor mecánico"]]
     detail_lines = receipt["lines"] if show_detail else []
     if not show_detail and receipt["lines"]:
         data.append([
@@ -5784,8 +5785,6 @@ def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user, show_
             "",
             Paragraph(f"Resumen: {len(receipt['lines'])} servicio(s) en {remisiones} remisión(es)", tiny),
             str(len(receipt["lines"])),
-            money(receipt["service_total"]),
-            "",
             money(receipt["worker_total"]),
         ])
     for line in detail_lines:
@@ -5795,19 +5794,16 @@ def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user, show_
             Paragraph(esc(line["vehicle_plate"]), tiny),
             Paragraph(esc(line["service_name"]), tiny),
             _qty(line["quantity"]),
-            money(line["line_total"]),
-            f"{_qty(line['worker_percentage'])}%",
             money(line["worker_amount"]),
         ])
     if not receipt["lines"]:
-        data.append(["", "", "", Paragraph("No hay servicios registrados en este periodo.", tiny), "", "", "", ""])
+        data.append(["", "", "", Paragraph("No hay servicios registrados en este periodo.", tiny), "", ""])
     detail_end = len(data) - 1
-    data.append(["", "", "", "", "", "Total servicios", "", money(receipt["service_total"])])
-    data.append(["", "", "", "", "", "TOTAL A PAGAR", "", money(receipt["worker_total"])])
+    data.append(["", "", "", "TOTAL A PAGAR", "", money(receipt["worker_total"])])
 
     table = Table(
         data,
-        colWidths=[18 * mm, 22 * mm, 18 * mm, 58 * mm, 11 * mm, 26 * mm, 13 * mm, 30 * mm],
+        colWidths=[20 * mm, 24 * mm, 22 * mm, 85 * mm, 15 * mm, 30 * mm],
         repeatRows=1,
     )
     table.setStyle(TableStyle([
@@ -5819,12 +5815,12 @@ def generate_mechanic_receipt_pdf(receipt: dict[str, Any], settings, user, show_
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ALIGN", (4, 1), (-1, -1), "RIGHT"),
         ("GRID", (0, 0), (-1, detail_end), 0.3, grid),
-        ("SPAN", (5, -2), (6, -2)),
-        ("SPAN", (5, -1), (6, -1)),
-        ("LINEABOVE", (5, -2), (-1, -1), 0.4, colors.HexColor("#777777")),
-        ("FONTNAME", (5, -1), (-1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (5, -1), (-1, -1), 8),
-        ("BACKGROUND", (5, -1), (-1, -1), light_blue),
+        ("SPAN", (3, -1), (4, -1)),
+        ("ALIGN", (3, -1), (4, -1), "RIGHT"),
+        ("LINEABOVE", (3, -1), (-1, -1), 0.4, colors.HexColor("#777777")),
+        ("FONTNAME", (3, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (3, -1), (-1, -1), 8),
+        ("BACKGROUND", (3, -1), (-1, -1), light_blue),
         ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
