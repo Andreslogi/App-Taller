@@ -2477,8 +2477,66 @@ def finances():
         )
         daily.append(row)
 
+    # ==========================================================
+    # VISUAL: INGRESOS VS GASTOS
+    # ==========================================================
+    def pct(part, whole):
+        whole = D(whole)
+        if whole <= 0:
+            return 0.0
+        return float(D(part) * 100 / whole)
+
+    comparison_max = max(total_inflows, total_outflows, Decimal("1"))
+    income_parts = [
+        {"label": "Productos cobrados", "amount": product_collected, "color": "#2f75b5"},
+        {"label": "Servicios cobrados", "amount": service_collected, "color": "#7fb2e5"},
+        {"label": "Ingresos extras", "amount": extra_income_total, "color": "#548235"},
+    ]
+    expense_parts = [
+        {"label": "Gastos operativos", "amount": expenses_total, "color": "#c00000"},
+        {"label": "70% mecánicos", "amount": service_worker, "color": "#e07b39"},
+        {"label": "Pagos a proveedores", "amount": supplier_payments_total, "color": "#bf9000"},
+    ]
+    for part in income_parts + expense_parts:
+        part["width"] = pct(part["amount"], comparison_max)
+    income_bar_width = pct(total_inflows, comparison_max)
+    expense_bar_width = pct(total_outflows, comparison_max)
+    net_margin = pct(net_cash_flow, total_inflows) if total_inflows > 0 else None
+
+    category_totals = {}
+    for row in expense_detail:
+        category = str(row["category"] or "Otros").strip() or "Otros"
+        category_totals[category] = category_totals.get(category, Decimal("0")) + D(row["amount"])
+    expense_categories = [
+        {"category": name, "amount": amount, "share": pct(amount, expenses_total)}
+        for name, amount in sorted(category_totals.items(), key=lambda kv: kv[1], reverse=True)
+    ]
+
+    trend = []
+    for row in sorted(daily, key=lambda r: r["activity_date"]):
+        inflow = row["collected"] + row["extra_income"]
+        outflow = row["worker_total"] + row["expenses"] + row["supplier_payments"]
+        trend.append({
+            "date": row["activity_date"],
+            "label": row["activity_date"][8:10] + "/" + row["activity_date"][5:7],
+            "inflow": inflow,
+            "outflow": outflow,
+            "net": inflow - outflow,
+        })
+    trend_max = max([t["inflow"] for t in trend] + [t["outflow"] for t in trend] + [Decimal("1")])
+    for t in trend:
+        t["inflow_height"] = pct(t["inflow"], trend_max)
+        t["outflow_height"] = pct(t["outflow"], trend_max)
+
     return render_template(
         "finances.html",
+        income_parts=income_parts,
+        expense_parts=expense_parts,
+        income_bar_width=income_bar_width,
+        expense_bar_width=expense_bar_width,
+        net_margin=net_margin,
+        expense_categories=expense_categories,
+        trend=trend,
         date_from=date_from,
         date_to=date_to,
 
