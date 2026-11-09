@@ -254,48 +254,6 @@
             <div class="form-group">
 
                 <label>
-                    Documento
-                </label>
-
-                <input
-                    name="customer_document"
-                    value="{{ invoice.customer_document or '' }}"
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    Teléfono
-                </label>
-
-                <input
-                    name="customer_phone"
-                    value="{{ invoice.customer_phone or '' }}"
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    Dirección
-                </label>
-
-                <input
-                    name="customer_address"
-                    value="{{ invoice.customer_address or '' }}"
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
                     Placa
                 </label>
 
@@ -349,12 +307,13 @@
                     onchange="toggleCreditFields()"
                 >
 
-                    {% for method in [
-                        'Efectivo',
-                        'Transferencia',
-                        'Tarjeta',
-                        'Crédito'
-                    ] %}
+                    {% set payment_methods = ['Efectivo', 'Transferencia', 'Crédito'] %}
+                    {# Remisiones antiguas pagadas con tarjeta conservan su forma de pago. #}
+                    {% if invoice.payment_method == 'Tarjeta' %}
+                        {% set payment_methods = payment_methods + ['Tarjeta'] %}
+                    {% endif %}
+
+                    {% for method in payment_methods %}
 
                         <option
                             value="{{ method }}"

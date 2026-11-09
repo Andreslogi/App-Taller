@@ -218,65 +218,9 @@
 
                 <input
                     name="customer_name"
-                    value="{{ request.form.get('customer_name', 'Consumidor final') }}"
+                    value="{{ request.form.get('customer_name', '') }}"
+                    placeholder="Nombre del cliente"
                     required
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    Documento
-                </label>
-
-                <input
-                    name="customer_document"
-                    value="{{ request.form.get('customer_document', '') }}"
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    Teléfono
-                </label>
-
-                <input
-                    name="customer_phone"
-                    value="{{ request.form.get('customer_phone', '') }}"
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    Correo
-                </label>
-
-                <input
-                    type="email"
-                    name="customer_email"
-                    value="{{ request.form.get('customer_email', '') }}"
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    Dirección
-                </label>
-
-                <input
-                    name="customer_address"
-                    value="{{ request.form.get('customer_address', '') }}"
                 >
 
             </div>
@@ -352,7 +296,6 @@
                     {% for method in [
                         'Efectivo',
                         'Transferencia',
-                        'Tarjeta',
                         'Crédito'
                     ] %}
 
@@ -446,8 +389,7 @@
 
                         {% for method in [
                             'Efectivo',
-                            'Transferencia',
-                            'Tarjeta'
+                            'Transferencia'
                         ] %}
 
                             <option

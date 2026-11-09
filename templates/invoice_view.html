@@ -212,15 +212,19 @@
                 {{ invoice.customer_name }}
             </div>
 
+            {% if invoice.customer_document %}
             <div>
                 <strong>Documento:</strong>
-                {{ invoice.customer_document or '-' }}
+                {{ invoice.customer_document }}
             </div>
+            {% endif %}
 
+            {% if invoice.customer_phone %}
             <div>
                 <strong>Teléfono:</strong>
-                {{ invoice.customer_phone or '-' }}
+                {{ invoice.customer_phone }}
             </div>
+            {% endif %}
 
             <div>
                 <strong>Placa:</strong>
@@ -232,10 +236,12 @@
 
         <div>
 
+            {% if invoice.customer_address %}
             <div>
                 <strong>Dirección:</strong>
-                {{ invoice.customer_address or '-' }}
+                {{ invoice.customer_address }}
             </div>
+            {% endif %}
 
             <div>
                 <strong>Forma de pago:</strong>

@@ -1647,6 +1647,10 @@ def invoices():
         invoices=rows
     )
 
+# Formas de pago que se ofrecen al crear/editar remisiones.
+INVOICE_PAYMENT_METHODS = ("Efectivo", "Transferencia", "Crédito")
+
+
 @app.route("/facturas/nueva", methods=["GET", "POST"])
 @login_required
 def invoice_new():
@@ -1664,6 +1668,8 @@ def invoice_new():
                 raise ValueError("Selecciona quién está realizando la venta.")
             salesperson_id = int(salesperson_id_raw)
             payment_method = request.form.get("payment_method", "Efectivo").strip()
+            if payment_method not in INVOICE_PAYMENT_METHODS:
+                raise ValueError("Forma de pago inválida.")
             notes = request.form.get("notes", "").strip()
 
             credit_due_date_raw = request.form.get("credit_due_date", "").strip()
@@ -4661,10 +4667,21 @@ def invoice_edit(invoice_id: int):
                 request.form.get("customer_name", "Consumidor final").strip()
                 or "Consumidor final"
             )
-            customer_document = request.form.get("customer_document", "").strip()
-            customer_phone = request.form.get("customer_phone", "").strip()
-            customer_address = request.form.get("customer_address", "").strip()
-            customer_email = request.form.get("customer_email", "").strip()
+            # Documento, teléfono y dirección ya no se piden en el formulario.
+            # Si el cliente no cambia se conservan los datos guardados en la
+            # remisión; si cambia, se limpian porque eran del cliente anterior.
+            same_customer = (
+                customer_name.strip().lower()
+                == (invoice["customer_name"] or "").strip().lower()
+            )
+            if same_customer:
+                customer_document = invoice["customer_document"] or ""
+                customer_phone = invoice["customer_phone"] or ""
+                customer_address = invoice["customer_address"] or ""
+            else:
+                customer_document = ""
+                customer_phone = ""
+                customer_address = ""
             vehicle_plate = request.form.get("vehicle_plate", "").strip().upper()
             salesperson_id_raw = request.form.get("salesperson_id", "").strip()
             payment_method = request.form.get("payment_method", "Efectivo").strip()
@@ -4676,7 +4693,12 @@ def invoice_edit(invoice_id: int):
                 raise ValueError("Selecciona quién realizó la venta.")
             salesperson_id = int(salesperson_id_raw)
 
-            if payment_method not in ("Efectivo", "Transferencia", "Tarjeta", "Crédito"):
+            # "Tarjeta" ya no se ofrece, pero una remisión antigua con tarjeta
+            # puede guardarse sin cambiar su forma de pago.
+            allowed_methods = INVOICE_PAYMENT_METHODS
+            if invoice["payment_method"] == "Tarjeta":
+                allowed_methods = allowed_methods + ("Tarjeta",)
+            if payment_method not in allowed_methods:
                 raise ValueError("Forma de pago inválida.")
 
             if issued_date:
@@ -4945,43 +4967,18 @@ def invoice_edit(invoice_id: int):
                 tax = (subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
                 total = subtotal + tax
 
-                # Cliente: conservar/actualizar o volver a consumidor final.
+                # Cliente: si no cambia se conserva el vínculo (sin tocar sus
+                # datos); si cambia, se registra el nuevo cliente por nombre.
                 customer_id = None
-                if customer_name.lower() != "consumidor final" or customer_document:
-                    existing = None
-                    if customer_document:
-                        existing = conn.execute(
-                            "SELECT id FROM customers WHERE document=? LIMIT 1",
-                            (customer_document,),
-                        ).fetchone()
-
-                    if existing:
-                        customer_id = existing["id"]
-                        conn.execute(
-                            """UPDATE customers
-                               SET name=?,phone=?,email=?,address=?
-                               WHERE id=?""",
-                            (
-                                customer_name,
-                                customer_phone,
-                                customer_email,
-                                customer_address,
-                                customer_id,
-                            ),
-                        )
-                    else:
-                        cur_customer = conn.execute(
-                            """INSERT INTO customers(document,name,phone,email,address)
-                               VALUES(?,?,?,?,?)""",
-                            (
-                                customer_document,
-                                customer_name,
-                                customer_phone,
-                                customer_email,
-                                customer_address,
-                            ),
-                        )
-                        customer_id = cur_customer.lastrowid
+                if same_customer:
+                    customer_id = invoice["customer_id"]
+                elif customer_name.lower() != "consumidor final":
+                    cur_customer = conn.execute(
+                        """INSERT INTO customers(document,name,phone,email,address)
+                           VALUES(?,?,?,?,?)""",
+                        ("", customer_name, "", "", ""),
+                    )
+                    customer_id = cur_customer.lastrowid
 
                 # Cartera: conservar pagos ya realizados y recalcular saldo/estado.
                 receivable = conn.execute(
@@ -5322,48 +5319,64 @@ def generate_invoice_pdf(invoice_id: int) -> Path:
 
     # Datos del cliente
     customer_name = invoice["customer_name"] or "-"
-    customer_document = invoice["customer_document"] or "-"
-    customer_phone = invoice["customer_phone"] or "-"
-    customer_address = invoice["customer_address"] or "-"
+    customer_document = invoice["customer_document"] or ""
+    customer_phone = invoice["customer_phone"] or ""
+    customer_address = invoice["customer_address"] or ""
     vehicle_plate = invoice["vehicle_plate"] or "-"
     payment_method = invoice["payment_method"] or "-"
     salesperson_name = invoice["salesperson_name"] or "-"
     user_name = invoice["user_name"] or "-"
     notes = invoice["notes"] or "-"
 
-    customer = Table(
+    # Documento, teléfono y dirección ya no se capturan; sólo se imprimen
+    # en remisiones antiguas que sí los tengan.
+    legacy_fields = [
+        (label, value)
+        for label, value in (
+            ("Documento", customer_document),
+            ("Teléfono", customer_phone),
+            ("Dirección", customer_address),
+        )
+        if value
+    ]
+    customer_rows = [
         [
-            [
-                "Cliente",
-                Paragraph(str(customer_name), tiny),
-                "Documento",
-                Paragraph(str(customer_document), tiny),
-            ],
-            [
-                "Teléfono",
-                Paragraph(str(customer_phone), tiny),
-                "Dirección",
-                Paragraph(str(customer_address), tiny),
-            ],
-            [
-                "Placa",
-                Paragraph(str(vehicle_plate), tiny),
-                "Forma de pago",
-                Paragraph(str(payment_method), tiny),
-            ],
-            [
-                "Vendedor",
-                Paragraph(str(salesperson_name), tiny),
-                "Usuario",
-                Paragraph(str(user_name), tiny),
-            ],
-            [
-                "Observaciones",
-                Paragraph(str(notes), tiny),
-                "",
-                "",
-            ],
+            "Cliente",
+            Paragraph(str(customer_name), tiny),
+            "Placa",
+            Paragraph(str(vehicle_plate), tiny),
         ],
+        [
+            "Vendedor",
+            Paragraph(str(salesperson_name), tiny),
+            "Forma de pago",
+            Paragraph(str(payment_method), tiny),
+        ],
+    ]
+    for i in range(0, len(legacy_fields), 2):
+        pair = legacy_fields[i:i + 2]
+        row = []
+        for label, value in pair:
+            row += [label, Paragraph(str(value), tiny)]
+        row += ["", ""] * (2 - len(pair))
+        customer_rows.append(row)
+    customer_rows += [
+        [
+            "Usuario",
+            Paragraph(str(user_name), tiny),
+            "",
+            "",
+        ],
+        [
+            "Observaciones",
+            Paragraph(str(notes), tiny),
+            "",
+            "",
+        ],
+    ]
+
+    customer = Table(
+        customer_rows,
         colWidths=[23 * mm, 72 * mm, 27 * mm, 69 * mm],
     )
     customer.setStyle(
