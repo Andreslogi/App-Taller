@@ -834,6 +834,21 @@
             </a>
 
 
+            <a
+                href="{{ url_for('mechanic_receipt') }}"
+                class="nav-link
+                {% if request.endpoint == 'mechanic_receipt' %}
+                    active
+                {% endif %}"
+            >
+                <span class="nav-icon">
+                    ✎
+                </span>
+
+                Comprobante mecánico
+            </a>
+
+
             {% if g.user and g.user["role"] in ("administrador", "vendedor") %}
 
                 <a
