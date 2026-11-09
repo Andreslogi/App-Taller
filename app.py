@@ -874,7 +874,7 @@ def movements():
             """SELECT id,code,description,stock
                FROM products
                WHERE active=1
-               ORDER BY description"""
+               ORDER BY code, description"""
         ).fetchall()
         rows = conn.execute(
             """SELECT m.*, p.code, p.description, u.full_name AS user_name
