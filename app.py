@@ -502,17 +502,11 @@ def dashboard():
 @app.route("/productos")
 @login_required
 def products():
+    # La búsqueda se hace en vivo en el navegador (static/searchable-select.js):
+    # se envían todos los productos activos y el parámetro q solo precarga el filtro.
     q = request.args.get("q", "").strip()
     with db_conn() as conn:
-        if q:
-            rows = conn.execute(
-                """SELECT * FROM products WHERE active=1 AND
-                (code LIKE ? OR description LIKE ? OR category LIKE ?)
-                ORDER BY description""",
-                (f"%{q}%", f"%{q}%", f"%{q}%"),
-            ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM products WHERE active=1 ORDER BY description").fetchall()
+        rows = conn.execute("SELECT * FROM products WHERE active=1 ORDER BY description").fetchall()
     return render_template("products.html", products=rows, q=q)
 
 
