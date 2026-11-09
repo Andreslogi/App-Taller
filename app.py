@@ -5525,27 +5525,10 @@ def _mechanic_receipt_params():
             raise ValueError(f"La fecha '{label}' no es válida.") from exc
     if date_from > date_to:
         raise ValueError("La fecha Desde no puede ser posterior a la fecha Hasta.")
+    # Solo se emiten comprobantes a mecánicos que trabajan hoy en el taller.
+    if mechanic and mechanic not in ACTIVE_MECHANICS:
+        raise ValueError(f"Solo se pueden generar comprobantes para: {', '.join(ACTIVE_MECHANICS)}.")
     return mechanic, date_from, date_to
-
-
-def _mechanic_names(conn) -> list[str]:
-    """Mecánicos autorizados más cualquier otro nombre que aparezca en remisiones antiguas."""
-    names = list(ACTIVE_MECHANICS)
-    for name in ALLOWED_MECHANICS:
-        if name not in names:
-            names.append(name)
-    rows = conn.execute(
-        """
-        SELECT DISTINCT TRIM(worker_name) AS worker_name
-        FROM invoice_service_items
-        WHERE TRIM(COALESCE(worker_name, '')) <> ''
-        ORDER BY 1
-        """
-    ).fetchall()
-    for row in rows:
-        if row["worker_name"] not in names:
-            names.append(row["worker_name"])
-    return names
 
 
 def get_mechanic_receipt(conn, mechanic: str, date_from: str, date_to: str) -> dict[str, Any]:
@@ -5637,7 +5620,7 @@ def mechanic_receipt():
     previous_week_end = week_start.fromordinal(week_start.toordinal() - 1)
 
     with db_conn() as conn:
-        mechanics = _mechanic_names(conn)
+        mechanics = list(ACTIVE_MECHANICS)
         if not mechanic:
             mechanic = mechanics[0] if mechanics else ""
         receipt = get_mechanic_receipt(conn, mechanic, date_from, date_to) if mechanic else None
