@@ -326,6 +326,19 @@ class Movement(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
 
+class ProductChange(db.Model):
+    """Bitácora de cambios en productos (precio, descripción, etc.) para trazabilidad."""
+    __tablename__ = "product_changes"
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False, index=True)
+    action = db.Column(db.String(30), nullable=False)
+    field = db.Column(db.String(60), default="")
+    old_value = db.Column(db.Text, default="")
+    new_value = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+
 def _normalize_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat(sep=" ", timespec="seconds")
@@ -402,7 +415,7 @@ class CompatConnection:
         lastrowid = None
         if insert_match and insert_match.group(1) in {
             "users", "products", "customers", "salespeople", "invoices", "invoice_items",
-            "services", "invoice_service_items", "movements",
+            "services", "invoice_service_items", "movements", "product_changes",
             "accounts_receivable", "accounts_receivable_payments",
             "accounts_payable", "accounts_payable_payments"
         } and " returning " not in lower and self.dialect == "postgresql":
@@ -435,6 +448,6 @@ def db_conn():
 __all__ = [
     "db", "db_conn", "IntegrityError", "BASE_DIR", "LOCAL_DB_PATH", "database_url",
     "User", "Setting", "Product", "Customer", "Salesperson", "Invoice", "InvoiceItem",
-    "Service", "InvoiceServiceItem", "Movement", "AccountReceivable",
+    "Service", "InvoiceServiceItem", "Movement", "ProductChange", "AccountReceivable",
     "AccountReceivablePayment","AccountPayable","AccountPayablePayment",
 ]

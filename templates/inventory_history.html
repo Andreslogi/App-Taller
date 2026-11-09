@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% set heading='Historial de inventario y precios' %}
+
+{% block content %}
+
+<div class="card">
+    <p class="muted" style="margin-top:0;">
+        Registro de quién creó o modificó productos (precio, costo, descripción, etc.)
+        y de todas las entradas y salidas de inventario, con su valor anterior y nuevo.
+    </p>
+
+    <form class="actions" method="get">
+        <input
+            style="max-width:320px"
+            name="q"
+            value="{{ q }}"
+            placeholder="Código o descripción del producto"
+        >
+
+        <select name="usuario" style="max-width:220px">
+            <option value="">Todos los usuarios</option>
+            {% for u in users %}
+                <option value="{{ u.id }}" {% if selected_user == u.id|string %}selected{% endif %}>
+                    {{ u.full_name }} ({{ u.username }})
+                </option>
+            {% endfor %}
+        </select>
+
+        <select name="tipo" style="max-width:220px">
+            <option value="" {% if not kind %}selected{% endif %}>Todo</option>
+            <option value="cambios" {% if kind == 'cambios' %}selected{% endif %}>Cambios de producto y precios</option>
+            <option value="movimientos" {% if kind == 'movimientos' %}selected{% endif %}>Entradas y salidas de stock</option>
+        </select>
+
+        <button class="btn btn-primary" type="submit">Filtrar</button>
+        <a class="btn btn-light" href="{{ url_for('inventory_history') }}">Limpiar</a>
+    </form>
+</div>
+
+<div class="card table-wrap">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Tipo</th>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Detalle</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for e in entries %}
+            <tr>
+                <td style="white-space:nowrap">{{ e.created_at.replace('T', ' ')[:19] }}</td>
+                <td>{{ e.user_name }}</td>
+                <td>
+                    {% if e.kind == 'Edición' and e.field in ('Precio de venta', 'Costo de compra') %}
+                        <span class="badge badge-low">Cambio de precio</span>
+                    {% elif e.kind == 'Edición' %}
+                        <span class="badge">Edición</span>
+                    {% elif e.kind == 'Entrada' %}
+                        <span class="badge badge-ok">Entrada</span>
+                    {% elif e.kind in ('Salida', 'Retiro') %}
+                        <span class="badge badge-out">{{ e.kind }}</span>
+                    {% else %}
+                        <span class="badge">{{ e.kind }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ e.code }}</td>
+                <td>{{ e.description }}</td>
+                <td>{{ e.detail }}</td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="6" class="muted">No hay registros con estos filtros.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% if entries|length >= 500 %}
+        <p class="muted">Se muestran los 500 registros más recientes. Usa los filtros para acotar.</p>
+    {% endif %}
+</div>
+
+{% endblock %}
